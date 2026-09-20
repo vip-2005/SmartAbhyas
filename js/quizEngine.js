@@ -14,11 +14,14 @@ const QuizEngine = {
     const limit = parseInt(document.getElementById("quiz-limit").value);
     const mode = document.getElementById("quiz-mode-select").value;
     const timerVal = parseInt(document.getElementById("quiz-timer-setting").value);
+    const selectedTopic = document.getElementById("quiz-topic-select") ? document.getElementById("quiz-topic-select").value : "all";
 
     const allQuestions = StorageManager.getAllQuestions();
     const mistakes = StorageManager.getUserProgress().incorrectQuestionIds || [];
 
     let pool = [];
+
+    // 1. मोड के अनुसार सवाल छाँटें (All vs Mistakes)
     if (mode === "mistakes") {
       const mistakeSet = new Set(mistakes);
       pool = allQuestions.filter(q => mistakeSet.has(q.id));
@@ -28,6 +31,15 @@ const QuizEngine = {
       }
     } else {
       pool = [...allQuestions];
+    }
+
+    // 2. चुने गए टॉपिक या विषय के अनुसार फ़िल्टर करें
+    if (selectedTopic !== "all") {
+      pool = pool.filter(q => (q.topic === selectedTopic || q.subject === selectedTopic));
+      if (pool.length === 0) {
+        App.showToast(`चुने गए टॉपिक '${selectedTopic}' में कोई सवाल नहीं मिला!`, "error");
+        return;
+      }
     }
 
     if (pool.length === 0) {

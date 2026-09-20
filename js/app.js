@@ -9,6 +9,7 @@ const App = {
     this.renderMistakeNotebook();
     this.renderQuestionBankList();
     this.renderAnalytics();
+    this.updateTopicFilterDropdown(); // नए टॉपिक फ़िल्टर ड्रॉपडाउन को इनिशियलाइज़ किया
   },
 
   renderHeaderStats() {
@@ -23,6 +24,35 @@ const App = {
     document.getElementById("mistake-count-badge").textContent = count;
     const notebookBadge = document.getElementById("notebook-count-badge");
     if (notebookBadge) notebookBadge.textContent = `${count} प्रश्न`;
+  },
+
+  // सभी उपलब्ध सवालों से यूनीक टॉपिक/सब्जेक्ट निकालकर ड्रॉपडाउन अपडेट करने का फ़ंक्शन
+  updateTopicFilterDropdown() {
+    const dropdown = document.getElementById("quiz-topic-select");
+    if (!dropdown) return;
+
+    const questions = StorageManager.getAllQuestions();
+    
+    // सभी टॉपिक्स की गिनती और सूची तैयार करें
+    const topicCounts = {};
+    questions.forEach(q => {
+      const topicName = q.topic || q.subject || "अन्य";
+      topicCounts[topicName] = (topicCounts[topicName] || 0) + 1;
+    });
+
+    const currentSelected = dropdown.value;
+    dropdown.innerHTML = `<option value="all">सभी विषय एवं टॉपिक (${questions.length} सवाल)</option>`;
+
+    Object.keys(topicCounts).sort().forEach(topic => {
+      const option = document.createElement("option");
+      option.value = topic;
+      option.textContent = `${topic} (${topicCounts[topic]} सवाल)`;
+      dropdown.appendChild(option);
+    });
+
+    if (currentSelected && topicCounts[currentSelected]) {
+      dropdown.value = currentSelected;
+    }
   },
 
   showToast(message, type = "info") {
@@ -56,6 +86,7 @@ const App = {
       activeNav.classList.remove("text-slate-600");
     }
 
+    if (tabId === "quiz") this.updateTopicFilterDropdown();
     if (tabId === "notebook") this.renderMistakeNotebook();
     if (tabId === "bank") this.renderQuestionBankList();
     if (tabId === "stats") this.renderAnalytics();
@@ -190,6 +221,7 @@ const App = {
         const parsed = JSON.parse(e.target.result);
         const count = StorageManager.importQuestions(parsed);
         this.renderQuestionBankList();
+        this.updateTopicFilterDropdown(); // नया टॉपिक जुड़ते ही ड्रॉपडाउन अपडेट
         this.showToast(`${count} सवाल सफलतापूर्वक इम्पोर्ट हुए!`, "success");
       } catch (err) {
         this.showToast("अमान्य JSON फाइल प्रारूप!", "error");
@@ -219,6 +251,7 @@ const App = {
       this.closePasteModal();
       document.getElementById("json-paste-area").value = "";
       this.renderQuestionBankList();
+      this.updateTopicFilterDropdown(); // नया टॉपिक जुड़ते ही ड्रॉपडाउन अपडेट
       this.showToast(`${count} सवाल सफलतापूर्वक जोड़े गए!`, "success");
     } catch (err) {
       this.showToast("JSON पार्स करने में त्रुटि! फॉर्मेट चेक करें।", "error");
@@ -229,6 +262,7 @@ const App = {
     if (confirm("क्या आप डिफ़ॉल्ट सवाल रीस्टोर करना चाहते हैं?")) {
       StorageManager.restoreDefaults();
       this.renderQuestionBankList();
+      this.updateTopicFilterDropdown(); // डिफ़ॉल्ट रीस्टोर पर ड्रॉपडाउन अपडेट
       this.showToast("Piyush Varshney Sir की शीट के 10 मूल सवाल रीस्टोर हो गए!", "success");
     }
   },
