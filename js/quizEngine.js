@@ -176,7 +176,6 @@ const QuizEngine = {
 
   selectOption(index) {
     this.userResponses[this.currentIndex] = index;
-    // केवल UI पर न्यूट्रल हाइलाइट अपडेट करें
     const optionsBox = document.getElementById("options-container");
     const buttons = optionsBox.querySelectorAll("button");
     buttons.forEach((btn, optIdx) => {
@@ -293,7 +292,13 @@ const QuizEngine = {
     document.getElementById("res-added-mistakes").textContent = `${wrong} सवाल`;
     document.getElementById("result-timestamp").textContent = `समाप्त: ${new Date().toLocaleDateString("hi-IN", { hour: "2-digit", minute: "2-digit" })}`;
 
-    StorageManager.recordQuiz(total, correct, wrong, accuracy);
+    // कुल और औसत समय की गणना
+    const totalTimeTaken = Object.values(this.timeSpentPerQuestion).reduce((acc, curr) => acc + curr, 0);
+    const avgTime = total > 0 ? Math.round(totalTimeTaken / total) : 0;
+
+    // 5th & 6th parameter me time pass kiya
+    StorageManager.recordQuiz(total, correct, wrong, accuracy, totalTimeTaken, avgTime);
+
     App.updateBadges();
     App.renderHeaderStats();
     App.renderAnalytics();

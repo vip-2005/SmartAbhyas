@@ -282,22 +282,10 @@ const App = {
     const totalCorrect = history.reduce((acc, curr) => acc + (curr.correct || 0), 0);
     const overallAcc = totalSolved > 0 ? Math.round((totalCorrect / totalSolved) * 100) : 0;
 
-    // कुल औसत समय की गणना (Overall Average Time)
-    const validTimeEntries = history.filter(h => h.totalTimeTaken && h.totalTimeTaken > 0);
-    const totalTimeSpentAll = validTimeEntries.reduce((acc, curr) => acc + (curr.totalTimeTaken || 0), 0);
-    const totalQuestionsWithTime = validTimeEntries.reduce((acc, curr) => acc + (curr.total || 0), 0);
-    const avgOverallTime = totalQuestionsWithTime > 0 ? Math.round(totalTimeSpentAll / totalQuestionsWithTime) : 0;
-
     document.getElementById("stat-tests-count").textContent = history.length;
     document.getElementById("stat-total-solved").textContent = totalSolved;
     document.getElementById("stat-overall-accuracy").textContent = `${overallAcc}%`;
     document.getElementById("stat-streak-display").textContent = `${progress.streak || 1} दिन 🔥`;
-
-    // अगर HTML में औसत गति वाला कोई एलिमेंट हो तो उसे भी सेट करें
-    const avgTimeStatEl = document.getElementById("stat-avg-time");
-    if (avgTimeStatEl) {
-      avgTimeStatEl.textContent = avgOverallTime > 0 ? `${avgOverallTime}s / सवाल` : "--";
-    }
 
     const historyContainer = document.getElementById("history-table-container");
     if (history.length === 0) {
@@ -315,7 +303,7 @@ const App = {
               <th class="py-2.5">सही</th>
               <th class="py-2.5">गलत</th>
               <th class="py-2.5">सटीकता</th>
-              <th class="py-2.5">औसत गति</th>
+              <th class="py-2.5">कुल समय</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
@@ -332,7 +320,7 @@ const App = {
                 </td>
                 <td class="py-2.5 font-medium text-slate-600">
                   <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs font-semibold">
-                    ⏱️ ${item.avgTime ? `${item.avgTime}s / प्र.` : (item.totalTimeTaken ? `${Math.round(item.totalTimeTaken / item.total)}s / प्र.` : "--")}
+                    ⏱️ ${item.totalTimeTaken ? this.formatDuration(item.totalTimeTaken) : "--"}
                   </span>
                 </td>
               </tr>
