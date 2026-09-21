@@ -80,7 +80,8 @@ const StorageManager = {
     this.saveDB(db);
   },
 
-  recordQuiz(total, correct, wrong, accuracy) {
+  // Update: totalTimeTaken और avgTime parameters जोड़े गए हैं
+  recordQuiz(total, correct, wrong, accuracy, totalTimeTaken = 0, avgTime = 0) {
     const db = this.getDB();
     const progress = db.userProgress;
 
@@ -102,14 +103,16 @@ const StorageManager = {
       progress.lastQuizDate = today;
     }
 
-    // Save history
+    // Save history with time data
     if (!progress.history) progress.history = [];
     progress.history.unshift({
       date: new Date().toISOString(),
       total,
       correct,
       wrong,
-      accuracy
+      accuracy,
+      totalTimeTaken, // कुल सेकंड्स
+      avgTime         // प्रति सवाल औसत सेकंड्स
     });
     if (progress.history.length > 25) progress.history.pop();
 
@@ -123,7 +126,6 @@ const StorageManager = {
     this.saveDB(db);
   },
 
-  // Import questions with dynamic subject / topic support
   importQuestions(data) {
     const db = this.getDB();
     let list = [];

@@ -1,14 +1,34 @@
 /**
  * quizEngine.js
- * Real Exam Mode: Navigation, Neutral Selection, Timer, and Post-Exam Review
+ * Real Exam Mode: Navigation, Neutral Selection, Timer, Question Time Tracking, and Post-Exam Review
  */
 const QuizEngine = {
   quizQuestions: [],
   currentIndex: 0,
   userResponses: {}, // { [index]: selectedOptionIndex }
+  timeSpentPerQuestion: {}, // { [index]: secondsSpent }
+  questionStartTime: null,
   timerInterval: null,
   timeRemaining: 60,
   perQuestionTimer: 60,
+
+  // Seconds ko format karne ke liye helper (e.g. 45s ya 1m 15s)
+  formatSeconds(totalSec) {
+    const sec = Math.max(0, Math.round(totalSec || 0));
+    if (sec < 60) return `${sec}s`;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}m ${s}s`;
+  },
+
+  // Current question par bitaye gaye samay ko save karna
+  recordCurrentQuestionTime() {
+    if (this.questionStartTime) {
+      const elapsed = Math.round((Date.now() - this.questionStartTime) / 1000);
+      this.timeSpentPerQuestion[this.currentIndex] = (this.timeSpentPerQuestion[this.currentIndex] || 0) + elapsed;
+      this.questionStartTime = Date.now(); // reset reference
+    }
+  },
 
   startQuiz() {
     const limit = parseInt(document.getElementById("quiz-limit").value);
@@ -52,6 +72,7 @@ const QuizEngine = {
 
     this.currentIndex = 0;
     this.userResponses = {};
+    this.timeSpentPerQuestion = {};
     this.perQuestionTimer = timerVal;
 
     document.getElementById("quiz-setup-card").classList.add("hidden");
@@ -67,6 +88,9 @@ const QuizEngine = {
 
   renderCurrentQuestion() {
     clearInterval(this.timerInterval);
+
+    // Question start timestamp track karna
+    this.questionStartTime = Date.now();
 
     const q = this.quizQuestions[this.currentIndex];
     const total = this.quizQuestions.length;
@@ -152,8 +176,23 @@ const QuizEngine = {
 
   selectOption(index) {
     this.userResponses[this.currentIndex] = index;
-    // केवल UI पर न्यूट्रल हाइलाइट अपडेट करें (बिना सही/गलत दिखाए)
-    this.renderCurrentQuestion();
+    // केवल UI पर न्यूट्रल हाइलाइट अपडेट करें
+    const optionsBox = document.getElementById("options-container");
+    const buttons = optionsBox.querySelectorAll("button");
+    buttons.forEach((btn, optIdx) => {
+      const isSelected = (optIdx === index);
+      btn.className = isSelected
+        ? "option-btn w-full p-4 rounded-xl border-2 border-brand-600 bg-brand-50 text-brand-900 font-semibold flex items-start gap-3 transition shadow-sm"
+        : "option-btn w-full p-4 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-left font-medium text-slate-700 flex items-start gap-3 transition";
+
+      const badge = btn.querySelector("span");
+      if (badge) {
+        badge.className = `${isSelected ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600'} w-6 h-6 rounded-lg text-xs font-bold flex items-center justify-center border border-slate-200 mt-0.5 flex-shrink-0`;
+      }
+    });
+
+    const clearBtn = document.getElementById("btn-clear-response");
+    if (clearBtn) clearBtn.disabled = false;
   },
 
   clearCurrentResponse() {
@@ -163,6 +202,7 @@ const QuizEngine = {
   },
 
   previousQuestion() {
+    this.recordCurrentQuestionTime();
     if (this.currentIndex > 0) {
       this.currentIndex--;
       this.renderCurrentQuestion();
@@ -170,6 +210,7 @@ const QuizEngine = {
   },
 
   saveAndNext() {
+    this.recordCurrentQuestionTime();
     if (this.currentIndex < this.quizQuestions.length - 1) {
       this.currentIndex++;
       this.renderCurrentQuestion();
@@ -179,6 +220,7 @@ const QuizEngine = {
   },
 
   handleTimeUp() {
+    this.recordCurrentQuestionTime();
     App.showToast("समय समाप्त! अगले सवाल पर जा रहे हैं।", "warning");
     if (this.currentIndex < this.quizQuestions.length - 1) {
       this.currentIndex++;
@@ -216,6 +258,7 @@ const QuizEngine = {
 
   finishQuiz() {
     clearInterval(this.timerInterval);
+    this.recordCurrentQuestionTime(); // Final question ka time record karein
 
     document.getElementById("quiz-live-card").classList.add("hidden");
     document.getElementById("quiz-result-card").classList.remove("hidden");
@@ -287,6 +330,7 @@ const QuizEngine = {
       const userSel = this.userResponses[idx];
       const isCorrect = (userSel === q.answer);
       const isUnattempted = (userSel === undefined);
+      const timeSpent = this.timeSpentPerQuestion[idx] || 0;
 
       let statusBadge = "";
       let cardBorder = "border-slate-200 bg-white";
@@ -300,6 +344,9 @@ const QuizEngine = {
         statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800">✕ गलत उत्तर</span>`;
         cardBorder = "border-rose-200 bg-rose-50/20";
       }
+
+      // Liya gaya time badge
+      const timeBadge = `<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">⏱️ ${this.formatSeconds(timeSpent)}</span>`;
 
       const qCard = document.createElement("div");
       qCard.className = `p-4 sm:p-5 rounded-2xl border ${cardBorder} space-y-3 transition`;
@@ -327,8 +374,11 @@ const QuizEngine = {
       });
 
       qCard.innerHTML = `
-        <div class="flex items-center justify-between gap-2">
-          <span class="text-xs font-bold text-slate-500 uppercase">Q${idx + 1}. [${q.subject || 'सामान्य'}]</span>
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-slate-500 uppercase">Q${idx + 1}. [${q.subject || 'सामान्य'}]</span>
+            ${timeBadge}
+          </div>
           ${statusBadge}
         </div>
         <p class="text-sm sm:text-base font-semibold text-slate-800">${q.question}</p>

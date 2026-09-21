@@ -9,7 +9,16 @@ const App = {
     this.renderMistakeNotebook();
     this.renderQuestionBankList();
     this.renderAnalytics();
-    this.updateTopicFilterDropdown(); // नए टॉपिक फ़िल्टर ड्रॉपडाउन को इनिशियलाइज़ किया
+    this.updateTopicFilterDropdown();
+  },
+
+  formatDuration(seconds) {
+    const sec = Math.max(0, Math.round(seconds || 0));
+    if (sec === 0) return "--";
+    if (sec < 60) return `${sec}s`;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}m ${s}s`;
   },
 
   renderHeaderStats() {
@@ -26,14 +35,12 @@ const App = {
     if (notebookBadge) notebookBadge.textContent = `${count} प्रश्न`;
   },
 
-  // सभी उपलब्ध सवालों से यूनीक टॉपिक/सब्जेक्ट निकालकर ड्रॉपडाउन अपडेट करने का फ़ंक्शन
   updateTopicFilterDropdown() {
     const dropdown = document.getElementById("quiz-topic-select");
     if (!dropdown) return;
 
     const questions = StorageManager.getAllQuestions();
     
-    // सभी टॉपिक्स की गिनती और सूची तैयार करें
     const topicCounts = {};
     questions.forEach(q => {
       const topicName = q.topic || q.subject || "अन्य";
@@ -221,7 +228,7 @@ const App = {
         const parsed = JSON.parse(e.target.result);
         const count = StorageManager.importQuestions(parsed);
         this.renderQuestionBankList();
-        this.updateTopicFilterDropdown(); // नया टॉपिक जुड़ते ही ड्रॉपडाउन अपडेट
+        this.updateTopicFilterDropdown();
         this.showToast(`${count} सवाल सफलतापूर्वक इम्पोर्ट हुए!`, "success");
       } catch (err) {
         this.showToast("अमान्य JSON फाइल प्रारूप!", "error");
@@ -251,7 +258,7 @@ const App = {
       this.closePasteModal();
       document.getElementById("json-paste-area").value = "";
       this.renderQuestionBankList();
-      this.updateTopicFilterDropdown(); // नया टॉपिक जुड़ते ही ड्रॉपडाउन अपडेट
+      this.updateTopicFilterDropdown();
       this.showToast(`${count} सवाल सफलतापूर्वक जोड़े गए!`, "success");
     } catch (err) {
       this.showToast("JSON पार्स करने में त्रुटि! फॉर्मेट चेक करें।", "error");
@@ -262,8 +269,8 @@ const App = {
     if (confirm("क्या आप डिफ़ॉल्ट सवाल रीस्टोर करना चाहते हैं?")) {
       StorageManager.restoreDefaults();
       this.renderQuestionBankList();
-      this.updateTopicFilterDropdown(); // डिफ़ॉल्ट रीस्टोर पर ड्रॉपडाउन अपडेट
-      this.showToast("Piyush Varshney Sir की शीट के 10 मूल सवाल रीस्टोर हो गए!", "success");
+      this.updateTopicFilterDropdown();
+      this.showToast("मूल सवाल रीस्टोर हो गए!", "success");
     }
   },
 
@@ -275,10 +282,22 @@ const App = {
     const totalCorrect = history.reduce((acc, curr) => acc + (curr.correct || 0), 0);
     const overallAcc = totalSolved > 0 ? Math.round((totalCorrect / totalSolved) * 100) : 0;
 
+    // कुल औसत समय की गणना (Overall Average Time)
+    const validTimeEntries = history.filter(h => h.totalTimeTaken && h.totalTimeTaken > 0);
+    const totalTimeSpentAll = validTimeEntries.reduce((acc, curr) => acc + (curr.totalTimeTaken || 0), 0);
+    const totalQuestionsWithTime = validTimeEntries.reduce((acc, curr) => acc + (curr.total || 0), 0);
+    const avgOverallTime = totalQuestionsWithTime > 0 ? Math.round(totalTimeSpentAll / totalQuestionsWithTime) : 0;
+
     document.getElementById("stat-tests-count").textContent = history.length;
     document.getElementById("stat-total-solved").textContent = totalSolved;
     document.getElementById("stat-overall-accuracy").textContent = `${overallAcc}%`;
     document.getElementById("stat-streak-display").textContent = `${progress.streak || 1} दिन 🔥`;
+
+    // अगर HTML में औसत गति वाला कोई एलिमेंट हो तो उसे भी सेट करें
+    const avgTimeStatEl = document.getElementById("stat-avg-time");
+    if (avgTimeStatEl) {
+      avgTimeStatEl.textContent = avgOverallTime > 0 ? `${avgOverallTime}s / सवाल` : "--";
+    }
 
     const historyContainer = document.getElementById("history-table-container");
     if (history.length === 0) {
@@ -287,32 +306,40 @@ const App = {
     }
 
     historyContainer.innerHTML = `
-      <table class="w-full text-left text-xs sm:text-sm">
-        <thead>
-          <tr class="border-b border-slate-200 text-slate-400 uppercase font-semibold text-xs">
-            <th class="py-2.5">समय / दिनांक</th>
-            <th class="py-2.5">प्रयास</th>
-            <th class="py-2.5">सही</th>
-            <th class="py-2.5">गलत</th>
-            <th class="py-2.5">सटीकता</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-          ${history.map(item => `
-            <tr>
-              <td class="py-2.5 text-slate-500">${new Date(item.date).toLocaleDateString("hi-IN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
-              <td class="py-2.5 font-medium text-slate-700">${item.total}</td>
-              <td class="py-2.5 font-semibold text-emerald-600">${item.correct}</td>
-              <td class="py-2.5 font-semibold text-rose-600">${item.wrong}</td>
-              <td class="py-2.5">
-                <span class="px-2 py-0.5 rounded-full text-xs font-bold ${item.accuracy >= 70 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}">
-                  ${item.accuracy}%
-                </span>
-              </td>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs sm:text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 text-slate-400 uppercase font-semibold text-xs">
+              <th class="py-2.5">समय / दिनांक</th>
+              <th class="py-2.5">प्रयास</th>
+              <th class="py-2.5">सही</th>
+              <th class="py-2.5">गलत</th>
+              <th class="py-2.5">सटीकता</th>
+              <th class="py-2.5">औसत गति</th>
             </tr>
-          `).join("")}
-        </tbody>
-      </table>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${history.map(item => `
+              <tr>
+                <td class="py-2.5 text-slate-500">${new Date(item.date).toLocaleDateString("hi-IN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
+                <td class="py-2.5 font-medium text-slate-700">${item.total}</td>
+                <td class="py-2.5 font-semibold text-emerald-600">${item.correct}</td>
+                <td class="py-2.5 font-semibold text-rose-600">${item.wrong}</td>
+                <td class="py-2.5">
+                  <span class="px-2 py-0.5 rounded-full text-xs font-bold ${item.accuracy >= 70 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}">
+                    ${item.accuracy}%
+                  </span>
+                </td>
+                <td class="py-2.5 font-medium text-slate-600">
+                  <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs font-semibold">
+                    ⏱️ ${item.avgTime ? `${item.avgTime}s / प्र.` : (item.totalTimeTaken ? `${Math.round(item.totalTimeTaken / item.total)}s / प्र.` : "--")}
+                  </span>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
     `;
   },
 
