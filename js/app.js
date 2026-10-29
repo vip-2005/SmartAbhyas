@@ -1,7 +1,7 @@
 /**
  * app.js
- * Multi-Set Vault UI, 100% Offline PDF-to-Mock Engine (No API Key Required),
- * Mistake Notebook, Analytics & KaTeX Auto-Rendering.
+ * Multi-Set Vault UI, Universal JSON Import (File + Direct Paste),
+ * Mistake Notebook, Analytics & KaTeX auto-rendering.
  */
 const App = {
   init() {
@@ -58,7 +58,7 @@ const App = {
     const sets = StorageManager.getAllTestSets();
     const currentSelected = dropdown.value;
 
-    dropdown.innerHTML = `<option value="all">📁 सभी फाइल्स मिक्स (${StorageManager.getAllQuestions().length} सवाल)</option>`;
+    dropdown.innerHTML = `<option value="all">📁 सभी सेट्स मिक्स (${StorageManager.getAllQuestions().length} सवाल)</option>`;
 
     sets.forEach(s => {
       const option = document.createElement("option");
@@ -204,13 +204,13 @@ const App = {
     const totalQ = StorageManager.getAllQuestions().length;
 
     if (statsText) {
-      statsText.textContent = `कुल अपलोड सेट: ${sets.length} | कुल सवाल: ${totalQ}`;
+      statsText.textContent = `कुल सेव्ड सेट्स: ${sets.length} | कुल सवाल: ${totalQ}`;
     }
 
     container.innerHTML = "";
 
     if (sets.length === 0) {
-      container.innerHTML = `<p class="text-sm text-slate-400 text-center py-8">कोई टेस्ट सेट उपलब्ध नहीं है। ऊपर से PDF या JSON अपलोड करें।</p>`;
+      container.innerHTML = `<p class="text-sm text-slate-400 text-center py-8">कोई टेस्ट सेट उपलब्ध नहीं है। बायीं तरफ से JSON फाइल या कोड इम्पोर्ट करें।</p>`;
       return;
     }
 
@@ -218,13 +218,11 @@ const App = {
       const card = document.createElement("div");
       card.className = "p-5 rounded-2xl border border-slate-200 hover:border-brand-200 bg-white shadow-sm space-y-4 transition";
 
-      const badgeColor = set.sourceType === "PDF" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-indigo-50 text-indigo-700 border-indigo-200";
-
       card.innerHTML = `
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div class="flex items-center gap-2 mb-1">
-              <span class="px-2 py-0.5 rounded text-xs font-bold border ${badgeColor}">${set.sourceType}</span>
+              <span class="px-2 py-0.5 rounded text-xs font-bold border bg-indigo-50 text-indigo-700 border-indigo-200">JSON Set</span>
               <span class="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700">${set.subject}</span>
               <span class="text-xs text-slate-400">📅 ${set.uploadDate}</span>
             </div>
@@ -246,7 +244,7 @@ const App = {
           <span class="font-semibold text-slate-500 block text-[11px] uppercase tracking-wider">Preview (पहले 2 सवाल):</span>
           ${set.questions.slice(0, 2).map((q, qIdx) => `
             <div class="truncate">
-              <span class="font-bold text-slate-700">Q${qIdx + 1}.</span> ${q.question}
+              <span class="font-bold text-slate-700">Q${qIdx + 1}.</span>${q.question}
             </div>
           `).join("")}
         </div>
@@ -267,6 +265,32 @@ const App = {
     }
   },
 
+  // Helper: AI Text / Markdown clean karke JSON parse karna
+  safeParseJsonText(rawInput) {
+    let clean = rawInput.trim();
+    // Markdown code blocks hatana
+    clean = clean.replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/```\s*$/, "").trim();
+
+    // Pehle direct parse karke dekhein
+    try {
+      return JSON.parse(clean);
+    } catch (e) {
+      // Bracket extraction agar AI ne aage-peeche extra baatein likhi hon
+      const startArr = clean.indexOf('[');
+      const endArr = clean.lastIndexOf(']');
+      const startObj = clean.indexOf('{');
+      const endObj = clean.lastIndexOf('}');
+
+      if (startArr !== -1 && endArr !== -1 && (startObj === -1 || startArr < startObj)) {
+        return JSON.parse(clean.substring(startArr, endArr + 1));
+      } else if (startObj !== -1 && endObj !== -1) {
+        return JSON.parse(clean.substring(startObj, endObj + 1));
+      }
+      throw new Error("Invalid JSON Syntax");
+    }
+  },
+
+  // 1. JSON File Select Handler
   handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -274,134 +298,24 @@ const App = {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const parsed = JSON.parse(e.target.result);
-        const questionsList = Array.isArray(parsed) ? parsed : (parsed.questions || []);
+        const parsed = this.safeParseJsonText(e.target.result);
         const cleanTitle = file.name.replace(/\.[^/.]+$/, "");
         const sub = parsed.subject || "General";
 
-        const newSet = StorageManager.addNewTestSet(cleanTitle, sub, questionsList, "JSON");
+        const newSet = StorageManager.addNewTestSet(cleanTitle, sub, parsed);
         this.renderTestSetsVault();
         this.updateSetFilterDropdown();
-        this.showToast(`नया सेट "${newSet.title}" जोड़ा गया!`, "success");
+        this.showToast(`नया सेट "${newSet.title}" (${newSet.questions.length} सवाल) जोड़ा गया!`, "success");
       } catch (err) {
-        this.showToast("अमान्य JSON फाइल प्रारूप!", "error");
+        console.error(err);
+        this.showToast("फाइल में अमान्य JSON डेटा मिला!", "error");
       }
     };
     reader.readAsText(file);
     event.target.value = "";
   },
 
-  // 100% OFFLINE PARSER ENGINE
-  parseQuestionsOffline(text, fileName) {
-    const rawBlocks = text.split(/(?:\r?\n)+(?=(?:Q\.?\s*\d+|प्र\.?\s*\d+|प्रश्न\s*\d+|\b\d{1,3}[\.\)]\s*))/i);
-    const questions = [];
-
-    rawBlocks.forEach((blk, idx) => {
-      const cleanBlock = blk.trim();
-      if (!cleanBlock || cleanBlock.length < 15) return;
-
-      const optMatches = [...cleanBlock.matchAll(/(?:\(([A-Da-d1-4])\)|(?:[A-Da-d1-4][\.\)]))\s*([^\n\(\)]+)/g)];
-
-      if (optMatches.length >= 2) {
-        const firstOptIndex = optMatches[0].index;
-        const qText = cleanBlock.substring(0, firstOptIndex)
-          .replace(/^(?:Q\.?\s*\d+|प्र\.?\s*\d+|प्रश्न\s*\d+|\b\d{1,3}[\.\)]\s*)[:\.\-]?\s*/i, "")
-          .trim();
-
-        const options = optMatches.slice(0, 4).map(m => m[2].trim());
-
-        let answer = 0;
-        const ansMatch = cleanBlock.match(/(?:Ans(?:wer)?|उत्तर|हल)\s*[:\-]?\s*\(?([A-Da-d1-4])/i);
-        if (ansMatch) {
-          const char = ansMatch[1].toUpperCase();
-          if (["A", "1"].includes(char)) answer = 0;
-          else if (["B", "2"].includes(char)) answer = 1;
-          else if (["C", "3"].includes(char)) answer = 2;
-          else if (["D", "4"].includes(char)) answer = 3;
-        }
-
-        if (qText.length > 3 && options.length >= 2) {
-          questions.push({
-            id: `PDF_SET_${Date.now()}_${idx + 1}`,
-            subject: "PDF Mock",
-            topic: fileName.replace(/\.[^/.]+$/, ""),
-            question: qText,
-            options: options,
-            answer: answer,
-            explanation: "PDF से स्वतः निकाला गया प्रश्न।",
-            source: fileName
-          });
-        }
-      }
-    });
-
-    return questions;
-  },
-
-  // Direct PDF Handler (Offline)
-  async handlePdfToMock(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const statusText = document.getElementById("pdf-status-text");
-    if (statusText) {
-      statusText.classList.remove("hidden");
-      statusText.textContent = "⏳ PDF से टेक्स्ट निकाला जा रहा है...";
-    }
-
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      let rawText = "";
-
-      const maxPages = Math.min(pdf.numPages, 10);
-      for (let i = 1; i <= maxPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageStrings = textContent.items.map(item => item.str).join(" ");
-        rawText += pageStrings + "\n";
-      }
-
-      if (rawText.trim().length < 40) {
-        throw new Error("SCANNED_PDF");
-      }
-
-      if (statusText) statusText.textContent = "⚡ सवालों और विकल्पों को अलग किया जा रहा है...";
-
-      const parsedQuestions = this.parseQuestionsOffline(rawText, file.name);
-
-      if (!parsedQuestions || parsedQuestions.length === 0) {
-        throw new Error("NO_QUESTIONS_PARSED");
-      }
-
-      const cleanTitle = file.name.replace(/\.[^/.]+$/, "");
-      const newSet = StorageManager.addNewTestSet(cleanTitle, "Practice Set", parsedQuestions, "PDF");
-
-      if (statusText) statusText.textContent = `✅ ${newSet.questions.length} सवाल तैयार! टेस्ट शुरू हो रहा है...`;
-      this.showToast(`${newSet.questions.length} सवालों का नया सेट तैयार हो गया!`, "success");
-
-      this.renderTestSetsVault();
-      this.updateSetFilterDropdown();
-
-      setTimeout(() => {
-        if (statusText) statusText.classList.add("hidden");
-        QuizEngine.startSetQuiz(newSet.id);
-      }, 1000);
-
-    } catch (err) {
-      console.error(err);
-      if (err.message === "SCANNED_PDF") {
-        this.showToast("यह स्कैन/फोटो वाली PDF है! कृपया डिजिटल टेक्स्ट PDF अपलोड करें।", "error");
-        if (statusText) statusText.textContent = "❌ स्कैन/फोटो PDF का टेक्स्ट नहीं पढ़ा जा सकता।";
-      } else {
-        this.showToast("सवालों के विकल्प नहीं मिल सके। कृपया PDF फॉर्मेट चेक करें।", "error");
-        if (statusText) statusText.textContent = "❌ सवालों के विकल्प नहीं पहचाने जा सके।";
-      }
-    }
-
-    event.target.value = "";
-  },
-
+  // 2. Direct Paste Modal Handler
   openPasteModal() {
     const modal = document.getElementById("paste-json-modal");
     if (modal) modal.classList.remove("hidden");
@@ -418,19 +332,27 @@ const App = {
       this.showToast("कृपया पहले JSON डेटा पेस्ट करें।", "error");
       return;
     }
-    try {
-      const parsed = JSON.parse(text);
-      const questionsList = Array.isArray(parsed) ? parsed : (parsed.questions || []);
-      const title = `Pasted Set (${new Date().toLocaleTimeString("hi-IN", { hour: '2-digit', minute: '2-digit' })})`;
 
-      const newSet = StorageManager.addNewTestSet(title, "General", questionsList, "JSON");
+    const titleInput = document.getElementById("paste-set-title");
+    const chosenTitle = (titleInput && titleInput.value.trim()) 
+      ? titleInput.value.trim() 
+      : `Test Set (${new Date().toLocaleTimeString("hi-IN", { hour: '2-digit', minute: '2-digit' })})`;
+
+    try {
+      const parsed = this.safeParseJsonText(text);
+      const sub = parsed.subject || "General";
+
+      const newSet = StorageManager.addNewTestSet(chosenTitle, sub, parsed);
       this.closePasteModal();
       document.getElementById("json-paste-area").value = "";
+      if (titleInput) titleInput.value = "";
+
       this.renderTestSetsVault();
       this.updateSetFilterDropdown();
-      this.showToast(`नया सेट "${newSet.title}" जोड़ा गया!`, "success");
+      this.showToast(`नया सेट "${newSet.title}" (${newSet.questions.length} सवाल) सफलतापूर्वक सेव हुआ!`, "success");
     } catch (err) {
-      this.showToast("JSON फॉर्मेट गलत है!", "error");
+      console.error(err);
+      this.showToast("JSON फॉर्मेट ठीक से पार्स नहीं हो सका! डेटा चेक करें।", "error");
     }
   },
 
@@ -474,7 +396,7 @@ const App = {
           <thead>
             <tr class="border-b border-slate-200 text-slate-400 uppercase font-semibold text-xs">
               <th class="py-2.5">दिनांक / समय</th>
-              <th class="py-2.5">फाइल / सेट नाम</th>
+              <th class="py-2.5">सेट का नाम</th>
               <th class="py-2.5">प्रयास</th>
               <th class="py-2.5">सही</th>
               <th class="py-2.5">गलत</th>

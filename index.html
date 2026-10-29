@@ -39,12 +39,6 @@
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
 
-  <!-- PDF.js library for browser PDF parsing -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-  </script>
-
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans min-h-full flex flex-col antialiased selection:bg-brand-500 selection:text-white">
@@ -123,14 +117,14 @@
           <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
         </div>
         <h2 class="text-2xl font-bold text-slate-800 mb-2">दैनिक अभ्यास शुरू करें</h2>
-        <p class="text-slate-600 mb-6 max-w-md mx-auto">अपनी अपलोड की गई कोई भी PDF/JSON फाइल या मिक्स्ड सेट चुनें और सटीक टाइमर के साथ मॉक टेस्ट दें।</p>
+        <p class="text-slate-600 mb-6 max-w-md mx-auto">अपनी सेव की गई कोई भी JSON फाइल या सभी सेट्स का मिक्स्ड टेस्ट चुनें और अभ्यास शुरू करें।</p>
         
         <!-- Controls Grid -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-left mb-6">
           <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
             <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">फाइल / सेट चुनें</label>
             <select id="quiz-set-select" class="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-xs sm:text-sm font-medium focus:ring-2 focus:ring-brand-500 focus:outline-none truncate">
-              <option value="all">📁 सभी फाइल्स मिक्स</option>
+              <option value="all">📁 सभी सेट्स मिक्स</option>
             </select>
           </div>
 
@@ -287,44 +281,30 @@
       <div id="mistakes-list" class="space-y-4"></div>
     </section>
 
-    <!-- TAB 3: FILE VAULT & QUESTION BANK -->
+    <!-- TAB 3: FILE VAULT & QUESTION BANK (JSON Dedicated) -->
     <section id="tab-bank" class="tab-content hidden space-y-6">
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        <!-- Left Tools: PDF & JSON -->
+        <!-- Left Tools: JSON Import Options -->
         <div class="lg:col-span-1 space-y-4">
           
-          <!-- Direct Offline PDF Card -->
-          <div class="bg-gradient-to-br from-indigo-50 to-brand-50 border border-brand-200 rounded-2xl p-5 shadow-sm text-center">
-            <div class="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center mx-auto mb-2 text-2xl shadow-md shadow-indigo-600/20">
-              📄
+          <!-- Universal JSON Import Card -->
+          <div class="bg-gradient-to-br from-indigo-50 to-brand-50 border border-brand-200 rounded-2xl p-5 shadow-sm">
+            <div class="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center mb-3 text-2xl shadow-md shadow-indigo-600/20">
+              📋
             </div>
-            <h3 class="font-bold text-slate-800 text-base">PDF से डायरेक्ट मॉक टेस्ट</h3>
-            <p class="text-xs text-slate-500 mb-4 mt-1">कोचिंग शीट या प्रैक्टिस PDF अपलोड करें। बिना किसी API Key के सीधे टेस्ट शुरू होगा।</p>
-            
-            <input type="file" id="pdf-file-input" accept=".pdf" class="hidden" onchange="App.handlePdfToMock(event)">
-            <button onclick="document.getElementById('pdf-file-input').click()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow transition flex items-center justify-center gap-2">
-              <span>📤</span> PDF अपलोड करें (Offline Mock)
-            </button>
-            <p id="pdf-status-text" class="text-xs font-semibold text-indigo-700 mt-2 hidden animate-pulse"></p>
-          </div>
-
-          <!-- JSON File Import Card -->
-          <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-            <h3 class="font-bold text-slate-800 text-base mb-1 flex items-center gap-2">
-              <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l4-4m0 0l4 4m-4-4v12"></path></svg>
-              JSON फाइल अपलोड (New Set)
-            </h3>
-            <p class="text-xs text-slate-500 mb-4">Math ya Reasoning ka JSON अपलोड करने पर वह अलग फाइल के रूप में सेव होगा।</p>
+            <h3 class="font-bold text-slate-800 text-base mb-1">नया टेस्ट सेट जोड़ें</h3>
+            <p class="text-xs text-slate-500 mb-4">Gemini AI से तैयार किया गया JSON कोड पेस्ट करें या .json फाइल अपलोड करें। यह ऑटो-क्लीन होकर अलग सेट में सेव होगा।</p>
             
             <input type="file" id="json-file-input" accept=".json" class="hidden" onchange="App.handleFileUpload(event)">
             
-            <div class="flex flex-col gap-2">
-              <button onclick="document.getElementById('json-file-input').click()" class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2">
-                JSON फाइल चुनें (.json)
+            <div class="flex flex-col gap-2.5">
+              <button onclick="App.openPasteModal()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow transition flex items-center justify-center gap-2">
+                <span>📝</span> JSON कोड पेस्ट करें (Paste AI Data)
               </button>
-              <button onclick="App.openPasteModal()" class="w-full py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold transition">
-                JSON कोड पेस्ट करें
+              
+              <button onclick="document.getElementById('json-file-input').click()" class="w-full py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2">
+                <span>📁</span> .JSON फाइल चुनें
               </button>
             </div>
           </div>
@@ -332,25 +312,25 @@
           <!-- Backup & Restore -->
           <div class="bg-slate-50 rounded-2xl border border-slate-200 p-5 space-y-3">
             <div>
-              <h4 class="font-semibold text-slate-700 text-xs uppercase mb-1">बैकअप & एक्सपोर्ट</h4>
+              <h4 class="font-semibold text-slate-700 text-xs uppercase mb-1">डेटा बैकअप & एक्सपोर्ट</h4>
               <button onclick="StorageManager.exportDatabase()" class="text-xs font-semibold text-brand-600 hover:underline">
                 सम्पूर्ण डेटाबेस बैकअप डाउनलोड करें (.json)
               </button>
             </div>
             <div class="border-t border-slate-200 pt-2">
               <button onclick="App.restoreDefaultQuestions()" class="text-xs font-medium text-rose-600 hover:underline">
-                डिफ़ॉल्ट रीज़निंग शीट रीसेट करें
+                डिफ़ॉल्ट रीज़निंग सेट रीसेट करें
               </button>
             </div>
           </div>
 
         </div>
 
-        <!-- Right: Vault List -->
+        <!-- Right: Uploaded Sets Vault -->
         <div class="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
           <div class="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
             <div>
-              <h3 class="font-bold text-slate-800 text-lg">फाइल वॉल्ट (Uploaded Sets)</h3>
+              <h3 class="font-bold text-slate-800 text-lg">फाइल वॉल्ट (Saved Test Sets)</h3>
               <p class="text-xs text-slate-500" id="bank-stats-text">लोड हो रहा है...</p>
             </div>
           </div>
@@ -394,9 +374,10 @@
 
   </main>
 
+  <!-- Footer -->
   <footer class="bg-white border-t border-slate-200 py-6 mt-12 text-slate-600">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-      <div class="text-center sm:text-left">
+      <div class="text-center sm:left">
         <p class="text-sm font-semibold text-slate-800">SmartAbhyas • स्मार्ट अभ्यास</p>
         <p class="text-xs text-slate-400 mt-0.5">सरकारी प्रतियोगी परीक्षाओं के लिए अभ्यास एवं रिवीजन मंच</p>
       </div>
@@ -419,24 +400,27 @@
         <h3 class="text-lg font-bold text-slate-800">JSON डेटा पेस्ट करें</h3>
         <button onclick="App.closePasteModal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold">&times;</button>
       </div>
-      <div class="py-3 flex-grow overflow-y-auto">
-        <p class="text-xs text-slate-500 mb-2">नीचे मान्य JSON एरे पेस्ट करें, यह अलग फाइल के रूप में सेव होगा:</p>
-        <textarea id="json-paste-area" rows="10" placeholder='[
+      <div class="py-3 flex-grow overflow-y-auto space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">सेट का नाम (वैकल्पिक)</label>
+          <input type="text" id="paste-set-title" placeholder="उदा. Math Percentage Sheet 1" class="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Gemini AI का JSON कोड</label>
+          <p class="text-[11px] text-slate-400 mb-1.5">Gemini से आया कोड जैसा है वैसा ही पेस्ट कर दें (चाहे markdown quotes हों या direct array):</p>
+          <textarea id="json-paste-area" rows="10" placeholder='[
   {
-    "id": "MATH_01",
-    "subject": "Maths",
-    "topic": "Percentage",
     "question": "A ki aay B se 25% adhik hai...",
     "options": ["20%", "25%", "15%", "10%"],
     "answer": 0,
-    "explanation": "Hal...",
-    "source": "Sheet"
+    "explanation": "Hal..."
   }
 ]' class="w-full text-xs font-mono p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:outline-none bg-slate-50"></textarea>
+        </div>
       </div>
       <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
         <button onclick="App.closePasteModal()" class="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-xl transition">रद्द करें</button>
-        <button onclick="App.importFromPastedText()" class="px-5 py-2 text-sm bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-xl transition">इम्पोर्ट करें</button>
+        <button onclick="App.importFromPastedText()" class="px-5 py-2 text-sm bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-xl transition">इम्पोर्ट & सेव करें</button>
       </div>
     </div>
   </div>

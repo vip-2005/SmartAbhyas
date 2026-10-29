@@ -1,8 +1,7 @@
 /**
  * storage.js
- * Multi-Set Storage Architecture:
- * Har upload alag Test Set (Vault) me save hoga.
- * User kisi bhi file ka alag se test de sakta hai ya delete kar sakta hai.
+ * Multi-Set Storage Architecture with Universal JSON Normalizer.
+ * Gemini AI se kisi bhi format me aane wale JSON ko safely clean aur save karta hai.
  */
 const StorageManager = {
   DB_KEY: "smartabhyas_db",
@@ -11,7 +10,6 @@ const StorageManager = {
     const raw = localStorage.getItem(this.DB_KEY);
     if (!raw) {
       const initialSchema = {
-        // Sets list jisme har uploaded file ka record aur sawal honge
         testSets: [
           {
             id: "default_set_01",
@@ -36,7 +34,6 @@ const StorageManager = {
 
     try {
       const db = JSON.parse(raw);
-      // Purane schema ko naye testSets schema me migrate karein agar zaroorat ho
       if (!db.testSets) {
         db.testSets = [
           {
@@ -64,18 +61,15 @@ const StorageManager = {
     localStorage.setItem(this.DB_KEY, JSON.stringify(db));
   },
 
-  // Saare Test Sets ki list (Upload date aur info ke sath)
   getAllTestSets() {
     return this.getDB().testSets || [];
   },
 
-  // Kisi specific Test Set ko ID se nikalna
   getTestSetById(setId) {
     const sets = this.getAllTestSets();
     return sets.find(s => s.id === setId) || null;
   },
 
-  // Saare sets ke sawal ek sath (all-in-one practice ke liye)
   getAllQuestions() {
     const sets = this.getAllTestSets();
     let all = [];
@@ -95,65 +89,139 @@ const StorageManager = {
     };
   },
 
-  // Naya Test Set Add karna (PDF ya JSON upload hone par)
-  addNewTestSet(title, subject, questionsList, sourceType = "JSON") {
+  // Gemini AI ke alag-alag variations ko standard questions array me convert karna
+  normalizeRawQuestions(data) {
+    let list = [];
+
+    if (Array.isArray(data)) {
+      list = data;
+    } else if (typeof data === "object" && data !== null) {
+      const possibleKeys = ["questions", "data", "quiz", "test", "items", "mcqs", "result", "list"];
+      for (const k of possibleKeys) {
+        if (Array.isArray(data[k])) {
+          list = data[k];
+          break;
+        }
+      }
+      if (list.length === 0) {
+        for (const val of Object.values(data)) {
+          if (Array.isArray(val) && val.length > 0 && typeof val[0] === "object") {
+            list = val;
+            break;
+          }
+        }
+      }
+    }
+
+    const validated = [];
+
+    list.forEach((raw, idx) => {
+      if (!raw || typeof raw !== "object") return;
+
+      // 1. Question extract
+      const qText = raw.question || raw.questionText || raw.q || raw.problem || raw.text || "";
+      if (!qText || String(qText).trim().length < 2) return;
+
+      // 2. Options extract (Array ya Object {A:..., B:...})
+      let options = [];
+      const rawOpts = raw.options || raw.choices || raw.opts || raw.answers;
+      if (Array.isArray(rawOpts)) {
+        options = rawOpts.map(o => (typeof o === "object" && o !== null ? (o.text || o.option || Object.values(o)[0]) : String(o).trim()));
+      } else if (typeof rawOpts === "object" && rawOpts !== null) {
+        options = Object.values(rawOpts).map(o => String(o).trim());
+      }
+
+      if (options.length < 2) return;
+
+      // 3. Answer extract (Number 0-3, letter "A"-"D", ya option text match)
+      let answerIndex = 0;
+      const rawAns = raw.answer !== undefined ? raw.answer : (raw.correct_answer !== undefined ? raw.correct_answer : (raw.correctAnswer !== undefined ? raw.correctAnswer : raw.ans));
+
+      if (typeof rawAns === "number") {
+        if (rawAns >= 0 && rawAns < options.length) {
+          answerIndex = rawAns;
+        } else if (rawAns >= 1 && rawAns <= options.length) {
+          answerIndex = rawAns - 1; // 1-based index fix
+        }
+      } else if (typeof rawAns === "string") {
+        const cleanAns = rawAns.trim();
+        const upper = cleanAns.toUpperCase();
+
+        if (["A", "OPTION A", "(A)"].includes(upper)) answerIndex = 0;
+        else if (["B", "OPTION B", "(B)"].includes(upper)) answerIndex = 1;
+        else if (["C", "OPTION C", "(C)"].includes(upper)) answerIndex = 2;
+        else if (["D", "OPTION D", "(D)"].includes(upper)) answerIndex = 3;
+        else {
+          // Direct option text comparison
+          const matchIdx = options.findIndex(opt => opt.toLowerCase() === cleanAns.toLowerCase());
+          if (matchIdx !== -1) {
+            answerIndex = matchIdx;
+          }
+        }
+      }
+
+      // 4. Explanation extract
+      const explanation = raw.explanation || raw.solution || raw.sol || raw.reason || raw.detail || "";
+
+      validated.push({
+        id: raw.id || `q_${Date.now()}_${idx + 1}`,
+        subject: raw.subject || "General",
+        topic: raw.topic || "General",
+        question: String(qText).trim(),
+        options: options,
+        answer: answerIndex,
+        explanation: String(explanation).trim()
+      });
+    });
+
+    return validated;
+  },
+
+  // Naya Set add karna (har JSON upload alag set banega)
+  addNewTestSet(title, subject, rawData) {
     const db = this.getDB();
     if (!db.testSets) db.testSets = [];
 
-    // Local YYYY-MM-DD date
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const setId = `set_${Date.now()}`;
 
-    // Clean aur validate questions
-    const validatedQuestions = [];
-    questionsList.forEach((item, idx) => {
-      if (item.question && Array.isArray(item.options) && typeof item.answer === "number") {
-        validatedQuestions.push({
-          id: item.id || `${setId}_q${idx + 1}`,
-          subject: (item.subject || subject || "General").trim(),
-          topic: (item.topic || "General").trim(),
-          question: item.question,
-          options: item.options,
-          answer: item.answer,
-          explanation: item.explanation || "",
-          source: title,
-          setId: setId
-        });
-      }
-    });
+    // Normalize incoming data
+    const validatedQuestions = this.normalizeRawQuestions(rawData);
 
     if (validatedQuestions.length === 0) {
-      throw new Error("Koi valid question nahi mila!");
+      throw new Error("Koi valid question nahi mila! JSON format check karein.");
     }
+
+    // Attach setId & source to each question
+    validatedQuestions.forEach(q => {
+      q.setId = setId;
+      q.source = title;
+      if (subject && subject !== "General") q.subject = subject;
+    });
 
     const newSet = {
       id: setId,
       title: title || `Test Set (${today})`,
-      subject: subject || "General",
+      subject: subject || (validatedQuestions[0]?.subject || "General"),
       uploadDate: today,
-      sourceType: sourceType, // "PDF" ya "JSON"
+      sourceType: "JSON",
       questions: validatedQuestions
     };
 
-    db.testSets.unshift(newSet); // Sabse upar dikhega
+    db.testSets.unshift(newSet);
     this.saveDB(db);
     return newSet;
   },
 
-  // Kisi specific file/set ko delete karna taaki storage khali rahe
   deleteTestSet(setId) {
     const db = this.getDB();
     const setTarget = db.testSets.find(s => s.id === setId);
     if (!setTarget) return false;
 
-    // Is set ke questions ki IDs
     const targetQIds = new Set(setTarget.questions.map(q => q.id));
-
-    // Set delete karein
     db.testSets = db.testSets.filter(s => s.id !== setId);
 
-    // Mistake notebook me se bhi in deleted sawalon ko hata dein
     db.userProgress.incorrectQuestionIds = (db.userProgress.incorrectQuestionIds || []).filter(
       id => !targetQIds.has(id)
     );
@@ -189,7 +257,6 @@ const StorageManager = {
 
     progress.totalAttempted = (progress.totalAttempted || 0) + total;
 
-    // Daily Streak Tracker
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
@@ -231,7 +298,6 @@ const StorageManager = {
     this.saveDB(db);
   },
 
-  // Pure data ka backup JSON
   exportDatabase() {
     const db = this.getDB();
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db, null, 2));
