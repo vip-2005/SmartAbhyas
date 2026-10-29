@@ -1,6 +1,6 @@
 /**
  * app.js
- * Multi-Set Vault UI, Bulletproof PDF-to-Mock Engine (Gemini AI + PDF.js),
+ * Multi-Set Vault UI, Hybrid PDF-to-Mock Engine (Gemini AI Header Support + Smart Offline Fallback),
  * Mistake Notebook, Analytics & KaTeX auto-rendering.
  */
 const App = {
@@ -72,7 +72,6 @@ const App = {
     if (notebookBadge) notebookBadge.textContent = `${count} प्रश्न`;
   },
 
-  // Setup tab ke dropdown ko update karna jisme saare sets date ke sath aate hain
   updateSetFilterDropdown() {
     const dropdown = document.getElementById("quiz-set-select");
     if (!dropdown) return;
@@ -217,7 +216,6 @@ const App = {
     }
   },
 
-  // File Vault (Uploaded Sets Render)
   renderTestSetsVault() {
     const container = document.getElementById("bank-list-container");
     const statsText = document.getElementById("bank-stats-text");
@@ -290,7 +288,6 @@ const App = {
     }
   },
 
-  // 1. JSON Upload (As dedicated set)
   handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -315,18 +312,55 @@ const App = {
     event.target.value = "";
   },
 
-  // 2. Direct PDF Upload with Gemini AI & PDF.js
+  // OFFLINE REGEX PARSER (ZERO API REQUIRED)
+  parseQuestionsOffline(text, fileName) {
+    const blocks = text.split(/(?:(?:\r?\n)+(?=(?:Q\.?|प्र\.?|प्रश्न\s*|\d+[\.\)]\s*)))/i);
+    const questions = [];
+
+    blocks.forEach((blk, idx) => {
+      const cleanBlock = blk.trim();
+      if (!cleanBlock || cleanBlock.length < 15) return;
+
+      const optMatches = [...cleanBlock.matchAll(/(?:\(([A-Da-d1-4])\)|(?:[A-Da-d1-4][\.\)]))\s*([^\n\(\)]+)/g)];
+      
+      if (optMatches.length >= 2) {
+        const firstOptIndex = optMatches[0].index;
+        const qText = cleanBlock.substring(0, firstOptIndex).replace(/^(?:Q\.?|प्र\.?|प्रश्न\s*|\d+[\.\)]\s*)/i, "").trim();
+        const options = optMatches.slice(0, 4).map(m => m[2].trim());
+
+        let answer = 0;
+        const ansMatch = cleanBlock.match(/(?:Ans(?:wer)?|उत्तर)\s*[:\-]?\s*\(?([A-Da-d1-4])/i);
+        if (ansMatch) {
+          const char = ansMatch[1].toUpperCase();
+          if (["A", "1"].includes(char)) answer = 0;
+          else if (["B", "2"].includes(char)) answer = 1;
+          else if (["C", "3"].includes(char)) answer = 2;
+          else if (["D", "4"].includes(char)) answer = 3;
+        }
+
+        if (qText.length > 5 && options.length >= 2) {
+          questions.push({
+            id: `OFFLINE_Q_${Date.now()}_${idx}`,
+            subject: "Offline Mock",
+            topic: "General",
+            question: qText,
+            options: options,
+            answer: answer,
+            explanation: "PDF से स्वतः निकाला गया प्रश्न।"
+          });
+        }
+      }
+    });
+
+    return questions;
+  },
+
+  // HYBRID PDF PARSER (Gemini AI with Offline Auto-Fallback)
   async handlePdfToMock(event) {
     const file = event.target.files[0];
     if (!file) return;
 
-    const apiKey = localStorage.getItem("gemini_api_key");
-    if (!apiKey) {
-      this.showToast("कृपया पहले Gemini API Key दर्ज करें और Save करें!", "error");
-      document.getElementById("api-key-setup-box")?.scrollIntoView({ behavior: 'smooth' });
-      return;
-    }
-
+    const apiKey = (localStorage.getItem("gemini_api_key") || "").trim();
     const statusText = document.getElementById("pdf-status-text");
     if (statusText) {
       statusText.classList.remove("hidden");
@@ -334,27 +368,39 @@ const App = {
     }
 
     try {
-      // PDF.js text extraction
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       let rawText = "";
 
-      const maxPages = Math.min(pdf.numPages, 5); // Read first 5 pages
+      const maxPages = Math.min(pdf.numPages, 6);
       for (let i = 1; i <= maxPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
-        const pageStrings = textContent.items.map(item => item.str).join(" ");
-        rawText += pageStrings + "\n";
+        rawText += textContent.items.map(item => item.str).join(" ") + "\n";
       }
 
-      // Check if text exists or is scanned/image
-      if (rawText.trim().length < 50) {
-        throw new Error("SCANNED_PDF: इस PDF में चयन योग्य टेक्स्ट नहीं है। यह फोटो या स्कैन की गई PDF प्रतीत होती है।");
+      if (rawText.trim().length < 40) {
+        throw new Error("SCANNED_PDF");
       }
 
-      if (statusText) statusText.textContent = "🤖 AI बहुविकल्पीय प्रश्न (MCQs) तैयार कर रहा है...";
+      let parsedQuestions = null;
 
-      const prompt = `
+      // 1. Agar API key di gayi hai toh Gemini se koshish karein
+      if (apiKey) {
+        try {
+          if (statusText) statusText.textContent = "🤖 AI सवाल और विकल्प तैयार कर रहा है...";
+
+          const isBearerToken = apiKey.startsWith("AQ.");
+          const endpoint = isBearerToken
+            ? "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+            : `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+          const headers = { "Content-Type": "application/json" };
+          if (isBearerToken) {
+            headers["Authorization"] = `Bearer ${apiKey}`;
+          }
+
+          const prompt = `
 Extract all multiple-choice questions from the following text.
 Respond with ONLY a raw JSON array adhering strictly to this schema:
 [
@@ -362,57 +408,56 @@ Respond with ONLY a raw JSON array adhering strictly to this schema:
     "id": "PDF_Q1",
     "subject": "General",
     "topic": "General",
-    "question": "Question text in Hindi or English (use $...$ for inline math if applicable)",
+    "question": "Question text in Hindi or English",
     "options": ["Option A", "Option B", "Option C", "Option D"],
     "answer": 0,
     "explanation": "Brief explanation"
   }
 ]
 Note:
-- "answer" MUST be the integer index of the correct option (0 for Option A, 1 for Option B, 2 for Option C, 3 for Option D).
-- Do not output any preamble, commentary, or markdown backticks. Return strictly the raw JSON array starting with [ and ending with ].
+- "answer" MUST be the index (0 for Option A, 1 for Option B, 2 for Option C, 3 for Option D).
+- Output strictly raw JSON array starting with [ and ending with ].
 
-Study Material Text:
+Text:
 ${rawText.slice(0, 8000)}
 `;
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-      });
+          const response = await fetch(endpoint, {
+            method: "POST",
+            headers: headers,
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+          });
 
-      const data = await response.json();
-
-      if (data.error) {
-        throw new Error(`API_ERROR: ${data.error.message || "Invalid API Key"}`);
+          const data = await response.json();
+          if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
+            let resText = data.candidates[0].content.parts[0].text.trim();
+            const firstBracket = resText.indexOf('[');
+            const lastBracket = resText.lastIndexOf(']');
+            if (firstBracket !== -1 && lastBracket !== -1) {
+              const cleanJson = resText.substring(firstBracket, lastBracket + 1);
+              parsedQuestions = JSON.parse(cleanJson);
+            }
+          }
+        } catch (apiErr) {
+          console.warn("AI API Call failed, switching to Offline Parser...", apiErr);
+        }
       }
 
-      if (!data.candidates || !data.candidates[0]?.content?.parts?.[0]?.text) {
-        throw new Error("EMPTY_AI_RESPONSE");
+      // 2. Offline Fallback (Agar API fail hui ya key nahi thi)
+      if (!parsedQuestions || !Array.isArray(parsedQuestions) || parsedQuestions.length === 0) {
+        if (statusText) statusText.textContent = "⚡ ऑटो ऑफलाइन पार्सर से सवाल निकाले जा रहे हैं...";
+        parsedQuestions = this.parseQuestionsOffline(rawText, file.name);
       }
 
-      let resText = data.candidates[0].content.parts[0].text.trim();
-
-      // Robust array bracket extraction
-      const firstBracket = resText.indexOf('[');
-      const lastBracket = resText.lastIndexOf(']');
-
-      if (firstBracket === -1 || lastBracket === -1) {
-        throw new Error("JSON_PARSE_ERROR: AI ने सही फॉर्मेट में प्रश्न नहीं लौटाए।");
-      }
-
-      const cleanJsonString = resText.substring(firstBracket, lastBracket + 1);
-      const questions = JSON.parse(cleanJsonString);
-
-      if (!Array.isArray(questions) || questions.length === 0) {
-        throw new Error("NO_QUESTIONS_FOUND: कोई वैध सवाल नहीं बन पाया।");
+      if (!parsedQuestions || parsedQuestions.length === 0) {
+        throw new Error("PARSING_FAILED: सवाल और विकल्प नहीं पहचाने जा सके।");
       }
 
       const cleanTitle = file.name.replace(/\.[^/.]+$/, "");
-      const newSet = StorageManager.addNewTestSet(cleanTitle, questions[0]?.subject || "PDF Mock", questions, "PDF");
+      const newSet = StorageManager.addNewTestSet(cleanTitle, parsedQuestions[0]?.subject || "PDF Mock", parsedQuestions, "PDF");
 
       if (statusText) statusText.textContent = `✅ ${newSet.questions.length} सवाल तैयार! टेस्ट शुरू हो रहा है...`;
+      this.showToast(`${newSet.questions.length} सवालों का नया सेट तैयार!`, "success");
 
       this.renderTestSetsVault();
       this.updateSetFilterDropdown();
@@ -424,14 +469,11 @@ ${rawText.slice(0, 8000)}
 
     } catch (err) {
       console.error(err);
-      if (err.message && err.message.startsWith("SCANNED_PDF")) {
+      if (err.message === "SCANNED_PDF") {
         this.showToast("यह स्कैन/फोटो PDF है! कृपया डिजिटल टेक्स्ट वाली PDF अपलोड करें।", "error");
         if (statusText) statusText.textContent = "❌ स्कैन/फोटो PDF का टेक्स्ट पढ़ा नहीं जा सकता।";
-      } else if (err.message && err.message.startsWith("API_ERROR")) {
-        this.showToast("API Key गलत है या लिमिट समाप्त हो गई है!", "error");
-        if (statusText) statusText.textContent = "❌ Gemini API Key अमान्य है।";
       } else {
-        this.showToast("PDF पार्स करने में समस्या आई। कृपया पुनः प्रयास करें।", "error");
+        this.showToast("PDF पार्स करने में समस्या आई। फॉर्मेट चेक करें।", "error");
         if (statusText) statusText.textContent = "❌ PDF पार्स करने में समस्या आई।";
       }
     }
