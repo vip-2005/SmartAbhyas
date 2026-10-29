@@ -1,15 +1,49 @@
 /**
  * app.js
- * Tab routing, Mistake Notebook, Question Bank, Analytics, and JSON import modal
+ * Multi-Set Vault UI, PDF-to-Mock Engine, Mistake Notebook, Analytics & KaTeX integration
  */
 const App = {
   init() {
     StorageManager.getDB();
+    this.loadSavedApiKey();
     this.renderHeaderStats();
     this.renderMistakeNotebook();
-    this.renderQuestionBankList();
+    this.renderTestSetsVault();
     this.renderAnalytics();
-    this.updateTopicFilterDropdown();
+    this.updateSetFilterDropdown();
+  },
+
+  // KaTeX helper
+  renderMath(container) {
+    if (window.renderMathInElement && container) {
+      renderMathInElement(container, {
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '$', right: '$', display: false }
+        ],
+        throwOnError: false
+      });
+    }
+  },
+
+  loadSavedApiKey() {
+    const keyInput = document.getElementById("gemini-api-key-input");
+    const saved = localStorage.getItem("gemini_api_key");
+    if (keyInput && saved) {
+      keyInput.value = saved;
+    }
+  },
+
+  saveApiKeyFromUI() {
+    const keyInput = document.getElementById("gemini-api-key-input");
+    if (!keyInput) return;
+    const key = keyInput.value.trim();
+    if (!key) {
+      this.showToast("Kripya valid API Key enter karein!", "error");
+      return;
+    }
+    localStorage.setItem("gemini_api_key", key);
+    this.showToast("Gemini API Key successfully save ho gayi!", "success");
   },
 
   formatDuration(seconds) {
@@ -30,40 +64,37 @@ const App = {
   updateBadges() {
     const progress = StorageManager.getUserProgress();
     const count = (progress.incorrectQuestionIds || []).length;
-    document.getElementById("mistake-count-badge").textContent = count;
+    const mistakeBadge = document.getElementById("mistake-count-badge");
+    if (mistakeBadge) mistakeBadge.textContent = count;
     const notebookBadge = document.getElementById("notebook-count-badge");
-    if (notebookBadge) notebookBadge.textContent = `${count} प्रश्न`;
+    if (notebookBadge) notebookBadge.textContent = `${count} prashn`;
   },
 
-  updateTopicFilterDropdown() {
-    const dropdown = document.getElementById("quiz-topic-select");
+  // Setup tab ke dropdown ko update karein jisme saare sets date ke sath dikhein
+  updateSetFilterDropdown() {
+    const dropdown = document.getElementById("quiz-set-select");
     if (!dropdown) return;
 
-    const questions = StorageManager.getAllQuestions();
-    
-    const topicCounts = {};
-    questions.forEach(q => {
-      const topicName = q.topic || q.subject || "अन्य";
-      topicCounts[topicName] = (topicCounts[topicName] || 0) + 1;
-    });
-
+    const sets = StorageManager.getAllTestSets();
     const currentSelected = dropdown.value;
-    dropdown.innerHTML = `<option value="all">सभी विषय एवं टॉपिक (${questions.length} सवाल)</option>`;
 
-    Object.keys(topicCounts).sort().forEach(topic => {
+    dropdown.innerHTML = `<option value="all">📁 Sabhi Files Mix (${StorageManager.getAllQuestions().length} Sawal)</option>`;
+
+    sets.forEach(s => {
       const option = document.createElement("option");
-      option.value = topic;
-      option.textContent = `${topic} (${topicCounts[topic]} सवाल)`;
+      option.value = s.id;
+      option.textContent = `${s.title} [${s.subject}] • (${s.questions.length} sawal - ${s.uploadDate})`;
       dropdown.appendChild(option);
     });
 
-    if (currentSelected && topicCounts[currentSelected]) {
+    if (currentSelected && sets.some(s => s.id === currentSelected)) {
       dropdown.value = currentSelected;
     }
   },
 
   showToast(message, type = "info") {
     const toast = document.getElementById("toast");
+    if (!toast) return;
     toast.textContent = message;
     toast.className = "fixed bottom-5 right-5 z-50 transform transition-all duration-300 px-5 py-3 rounded-xl shadow-xl text-white text-sm font-semibold";
 
@@ -93,16 +124,16 @@ const App = {
       activeNav.classList.remove("text-slate-600");
     }
 
-    if (tabId === "quiz") this.updateTopicFilterDropdown();
+    if (tabId === "quiz") this.updateSetFilterDropdown();
     if (tabId === "notebook") this.renderMistakeNotebook();
-    if (tabId === "bank") this.renderQuestionBankList();
+    if (tabId === "bank") this.renderTestSetsVault();
     if (tabId === "stats") this.renderAnalytics();
   },
 
   startMistakesOnlyQuiz() {
     const mistakes = StorageManager.getUserProgress().incorrectQuestionIds || [];
     if (mistakes.length === 0) {
-      this.showToast("समीक्षा के लिए कोई गलत सवाल नहीं बचा है!", "info");
+      this.showToast("Review ke liye koi galat sawal nahi hai!", "info");
       return;
     }
     this.switchTab("quiz");
@@ -112,6 +143,7 @@ const App = {
 
   renderMistakeNotebook() {
     const container = document.getElementById("mistakes-list");
+    if (!container) return;
     container.innerHTML = "";
 
     const mistakes = new Set(StorageManager.getUserProgress().incorrectQuestionIds || []);
@@ -124,8 +156,8 @@ const App = {
           <div class="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3">
             <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
           </div>
-          <h3 class="font-bold text-slate-800 text-lg">शानदार! कोई गलती बकाया नहीं है</h3>
-          <p class="text-slate-500 text-sm mt-1 max-w-sm mx-auto">जब आप टेस्ट देंगे और कोई सवाल गलत होगा, तो वह स्वतः यहाँ रिवीजन के लिए दर्ज हो जाएगा।</p>
+          <h3 class="font-bold text-slate-800 text-lg">Shaandaar! Koi galti baki nahi hai</h3>
+          <p class="text-slate-500 text-sm mt-1 max-w-sm mx-auto">Jab aap test denge aur koi sawal galat hoga, toh wo yahan automatic revision ke liye aa jayega.</p>
         </div>
       `;
       return;
@@ -137,12 +169,12 @@ const App = {
       card.innerHTML = `
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-2">
-            <span class="text-xs font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-700">गलत हुआ प्रश्न #${idx + 1}</span>
-            <span class="text-xs text-slate-400 font-medium">${q.subject || "Reasoning"} • ${q.topic || "Topic"}</span>
+            <span class="text-xs font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-700">Galti #${idx + 1}</span>
+            <span class="text-xs text-slate-400 font-medium">${q.subject || "General"} • ${q.topic || "Topic"}</span>
           </div>
           <button onclick="App.resolveMistake('${q.id}')" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition flex items-center gap-1.5">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-            रिवीजन पूर्ण (Resolved)
+            Revision Purna (Resolved)
           </button>
         </div>
 
@@ -151,73 +183,113 @@ const App = {
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
           ${q.options.map((opt, oIdx) => `
             <div class="p-2.5 rounded-lg border ${oIdx === q.answer ? "border-emerald-400 bg-emerald-50/50 text-emerald-900 font-semibold" : "border-slate-200 bg-slate-50 text-slate-600"}">
-              <span class="font-bold mr-1">${String.fromCharCode(65 + oIdx)}.</span>${opt}
+              <span class="font-bold mr-1">${String.fromCharCode(65 + oIdx)}.</span><span>${opt}</span>
             </div>
           `).join("")}
         </div>
 
         <div class="bg-amber-50/70 border border-amber-200 rounded-xl p-3 text-xs text-slate-700">
-          <span class="font-bold text-amber-800 block mb-1">💡 सही हल / व्याख्या:</span>
-          <p class="whitespace-pre-line">${q.explanation || "उत्तर: विकल्प " + String.fromCharCode(65 + q.answer)}</p>
+          <span class="font-bold text-amber-800 block mb-1">💡 Solution & Explanation:</span>
+          <p class="whitespace-pre-line leading-relaxed">${q.explanation || "Uttar: Vikalp " + String.fromCharCode(65 + q.answer)}</p>
         </div>
       `;
       container.appendChild(card);
     });
+
+    this.renderMath(container);
   },
 
   resolveMistake(id) {
     StorageManager.removeMistake(id);
     this.updateBadges();
     this.renderMistakeNotebook();
-    this.showToast("प्रश्न को सुधारा हुआ मान लिया गया!", "success");
+    this.showToast("Prashn ko sudhara hua maan liya gaya!", "success");
   },
 
   clearResolvedMistakesPrompt() {
-    if (confirm("क्या आप सभी गलत सवालों की लिस्ट साफ़ करना चाहते हैं?")) {
+    if (confirm("Kya aap sabhi galat sawalon ki list saaf karna chahte hain?")) {
       StorageManager.clearAllMistakes();
       this.updateBadges();
       this.renderMistakeNotebook();
-      this.showToast("मिस्टेक नोटबुक खाली कर दी गई।", "info");
+      this.showToast("Mistake notebook khali kar di gayi.", "info");
     }
   },
 
-  renderQuestionBankList() {
+  // TAB 3: Alag-Alag Uploaded Files/Sets ka Vault Render Karein
+  renderTestSetsVault() {
     const container = document.getElementById("bank-list-container");
-    const searchTerm = (document.getElementById("bank-search")?.value || "").toLowerCase().trim();
     const statsText = document.getElementById("bank-stats-text");
+    if (!container) return;
 
-    const questions = StorageManager.getAllQuestions();
-    const filtered = questions.filter(q =>
-      q.question.toLowerCase().includes(searchTerm) ||
-      (q.topic && q.topic.toLowerCase().includes(searchTerm)) ||
-      (q.subject && q.subject.toLowerCase().includes(searchTerm))
-    );
+    const sets = StorageManager.getAllTestSets();
+    const totalQ = StorageManager.getAllQuestions().length;
 
-    statsText.textContent = `कुल उपलब्ध सवाल: ${questions.length} (दिख रहे हैं: ${filtered.length})`;
+    if (statsText) {
+      statsText.textContent = `Total Uploaded Sets: ${sets.length} | Kul Sawal: ${totalQ}`;
+    }
+
     container.innerHTML = "";
 
-    if (filtered.length === 0) {
-      container.innerHTML = `<p class="text-sm text-slate-400 text-center py-8">कोई प्रश्न नहीं मिला।</p>`;
+    if (sets.length === 0) {
+      container.innerHTML = `<p class="text-sm text-slate-400 text-center py-8">Koi test set uplabdh nahi hai. Upar se PDF ya JSON upload karein.</p>`;
       return;
     }
 
-    filtered.forEach((q, idx) => {
-      const item = document.createElement("div");
-      item.className = "p-4 rounded-xl border border-slate-200 hover:border-slate-300 bg-slate-50/50 space-y-2";
-      item.innerHTML = `
-        <div class="flex items-start justify-between gap-3">
-          <span class="text-xs font-bold text-brand-600 bg-brand-50 px-2 py-0.5 rounded">#${q.id || (idx + 1)}</span>
-          <span class="text-xs text-slate-400 font-medium">${q.subject || "Reasoning"} • ${q.topic || "Topic"}</span>
+    sets.forEach(set => {
+      const card = document.createElement("div");
+      card.className = "p-5 rounded-2xl border border-slate-200 hover:border-brand-200 bg-white shadow-sm space-y-4 transition";
+
+      const badgeColor = set.sourceType === "PDF" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-indigo-50 text-indigo-700 border-indigo-200";
+
+      card.innerHTML = `
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="px-2 py-0.5 rounded text-xs font-bold border ${badgeColor}">${set.sourceType}</span>
+              <span class="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700">${set.subject}</span>
+              <span class="text-xs text-slate-400">📅 ${set.uploadDate}</span>
+            </div>
+            <h4 class="font-bold text-slate-800 text-base">${set.title}</h4>
+            <p class="text-xs text-slate-500 mt-0.5">Total Questions: <span class="font-semibold text-slate-700">${set.questions.length}</span></p>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button onclick="QuizEngine.startSetQuiz('${set.id}')" class="px-3.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold shadow transition flex items-center gap-1.5">
+              <span>▶</span> Iska Test Dein
+            </button>
+            <button onclick="App.confirmDeleteSet('${set.id}', '${set.title.replace(/'/g, "\\'")}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-500 rounded-xl text-xs font-medium border border-slate-200 transition" title="Set Delete Karein">
+              🗑️
+            </button>
+          </div>
         </div>
-        <p class="text-sm font-semibold text-slate-800">${q.question}</p>
-        <div class="text-xs text-slate-500">
-          सही उत्तर: <span class="font-bold text-emerald-600">${q.options[q.answer]}</span>
+
+        <!-- Sample Questions Preview (First 2 questions) -->
+        <div class="bg-slate-50 rounded-xl p-3 border border-slate-100 text-xs text-slate-600 space-y-1.5">
+          <span class="font-semibold text-slate-500 block text-[11px] uppercase tracking-wider">Preview (Pehle 2 Sawal):</span>
+          ${set.questions.slice(0, 2).map((q, qIdx) => `
+            <div class="truncate">
+              <span class="font-bold text-slate-700">Q${qIdx + 1}.</span>${q.question}
+            </div>
+          `).join("")}
         </div>
       `;
-      container.appendChild(item);
+      container.appendChild(card);
     });
+
+    this.renderMath(container);
   },
 
+  confirmDeleteSet(setId, title) {
+    if (confirm(`Kya aap set "${title}" ko delete karna chahte hain? Iske sawal aur iski mistakelist hata di jayegi.`)) {
+      StorageManager.deleteTestSet(setId);
+      this.renderTestSetsVault();
+      this.updateSetFilterDropdown();
+      this.updateBadges();
+      this.showToast("Set kamyabi se delete ho gaya!", "success");
+    }
+  },
+
+  // 1. JSON File Upload (As a dedicated set)
   handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -226,15 +298,112 @@ const App = {
     reader.onload = (e) => {
       try {
         const parsed = JSON.parse(e.target.result);
-        const count = StorageManager.importQuestions(parsed);
-        this.renderQuestionBankList();
-        this.updateTopicFilterDropdown();
-        this.showToast(`${count} सवाल सफलतापूर्वक इम्पोर्ट हुए!`, "success");
+        const questionsList = Array.isArray(parsed) ? parsed : (parsed.questions || []);
+        const cleanTitle = file.name.replace(/\.[^/.]+$/, "");
+        const sub = parsed.subject || "General";
+
+        const newSet = StorageManager.addNewTestSet(cleanTitle, sub, questionsList, "JSON");
+        this.renderTestSetsVault();
+        this.updateSetFilterDropdown();
+        this.showToast(`Naya set "${newSet.title}" (${newSet.questions.length} sawal) add ho gaya!`, "success");
       } catch (err) {
-        this.showToast("अमान्य JSON फाइल प्रारूप!", "error");
+        this.showToast("Invalid JSON file format!", "error");
       }
     };
     reader.readAsText(file);
+    event.target.value = "";
+  },
+
+  // 2. Direct PDF Upload with Gemini AI & PDF.js
+  async handlePdfToMock(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const apiKey = localStorage.getItem("gemini_api_key");
+    if (!apiKey) {
+      this.showToast("Pehle Gemini API Key dalein aur Save karein!", "error");
+      document.getElementById("api-key-setup-box")?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+
+    const statusText = document.getElementById("pdf-status-text");
+    if (statusText) {
+      statusText.classList.remove("hidden");
+      statusText.textContent = "⏳ PDF se prashn nikaale ja rahe hain...";
+    }
+
+    try {
+      // PDF.js Text Extraction
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let rawText = "";
+
+      const maxPages = Math.min(pdf.numPages, 6); // Pehle 6 pages
+      for (let i = 1; i <= maxPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        rawText += textContent.items.map(item => item.str).join(" ") + "\n";
+      }
+
+      if (statusText) statusText.textContent = "🤖 AI Multiple-Choice Questions prepare kar raha hai...";
+
+      const prompt = `
+Extract all multiple-choice questions from this study sheet text. Return ONLY a valid JSON array adhering strictly to this schema:
+[
+  {
+    "id": "PDF_Q1",
+    "subject": "Maths",
+    "topic": "General",
+    "question": "Question text in Hindi or English (use $...$ for inline math or formulas if applicable)",
+    "options": ["Option A", "Option B", "Option C", "Option D"],
+    "answer": 0,
+    "explanation": "Detailed explanation"
+  }
+]
+Rules:
+- "answer" must be the zero-based index of correct option (0 for A, 1 for B, 2 for C, 3 for D).
+- Output strictly raw JSON only. No markdown formatting, no backticks, no comments.
+
+Content:
+${rawText.slice(0, 10000)}
+`;
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      });
+
+      const data = await response.json();
+      if (!data.candidates || !data.candidates[0]) {
+        throw new Error("AI response format error");
+      }
+
+      let resText = data.candidates[0].content.parts[0].text.trim();
+      resText = resText.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
+
+      const questions = JSON.parse(resText);
+      const cleanTitle = file.name.replace(/\.[^/.]+$/, "");
+
+      // Alag set ke roop me save karein
+      const newSet = StorageManager.addNewTestSet(cleanTitle, questions[0]?.subject || "PDF Mock", questions, "PDF");
+
+      if (statusText) statusText.textContent = `✅ ${newSet.questions.length} sawal tayyar! Test shuru ho raha hai...`;
+
+      this.renderTestSetsVault();
+      this.updateSetFilterDropdown();
+
+      setTimeout(() => {
+        if (statusText) statusText.classList.add("hidden");
+        QuizEngine.startSetQuiz(newSet.id);
+      }, 1200);
+
+    } catch (err) {
+      console.error(err);
+      if (statusText) statusText.textContent = "❌ PDF parse karne me error aaya. Kripya check karein text readable hai ya nahi.";
+      this.showToast("PDF parsing error! Check API key or PDF text.", "error");
+    }
+
     event.target.value = "";
   },
 
@@ -249,28 +418,31 @@ const App = {
   importFromPastedText() {
     const text = document.getElementById("json-paste-area").value.trim();
     if (!text) {
-      this.showToast("कृपया पहले JSON डेटा पेस्ट करें।", "error");
+      this.showToast("Kripya pehle JSON data paste karein.", "error");
       return;
     }
     try {
       const parsed = JSON.parse(text);
-      const count = StorageManager.importQuestions(parsed);
+      const questionsList = Array.isArray(parsed) ? parsed : (parsed.questions || []);
+      const title = `Pasted Set (${new Date().toLocaleTimeString("hi-IN", { hour: '2-digit', minute: '2-digit' })})`;
+      
+      const newSet = StorageManager.addNewTestSet(title, "General", questionsList, "JSON");
       this.closePasteModal();
       document.getElementById("json-paste-area").value = "";
-      this.renderQuestionBankList();
-      this.updateTopicFilterDropdown();
-      this.showToast(`${count} सवाल सफलतापूर्वक जोड़े गए!`, "success");
+      this.renderTestSetsVault();
+      this.updateSetFilterDropdown();
+      this.showToast(`Naya set "${newSet.title}" jod diya gaya!`, "success");
     } catch (err) {
-      this.showToast("JSON पार्स करने में त्रुटि! फॉर्मेट चेक करें।", "error");
+      this.showToast("JSON format galat hai!", "error");
     }
   },
 
   restoreDefaultQuestions() {
-    if (confirm("क्या आप डिफ़ॉल्ट सवाल रीस्टोर करना चाहते हैं?")) {
+    if (confirm("Kya aap default questions restore karna chahte hain?")) {
       StorageManager.restoreDefaults();
-      this.renderQuestionBankList();
-      this.updateTopicFilterDropdown();
-      this.showToast("मूल सवाल रीस्टोर हो गए!", "success");
+      this.renderTestSetsVault();
+      this.updateSetFilterDropdown();
+      this.showToast("Default questions restore ho gaye!", "success");
     }
   },
 
@@ -285,11 +457,13 @@ const App = {
     document.getElementById("stat-tests-count").textContent = history.length;
     document.getElementById("stat-total-solved").textContent = totalSolved;
     document.getElementById("stat-overall-accuracy").textContent = `${overallAcc}%`;
-    document.getElementById("stat-streak-display").textContent = `${progress.streak || 1} दिन 🔥`;
+    document.getElementById("stat-streak-display").textContent = `${progress.streak || 1} din 🔥`;
 
     const historyContainer = document.getElementById("history-table-container");
+    if (!historyContainer) return;
+
     if (history.length === 0) {
-      historyContainer.innerHTML = `<p class="text-sm text-slate-400 py-4 text-center">अभी तक कोई टेस्ट रिकॉर्ड नहीं है।</p>`;
+      historyContainer.innerHTML = `<p class="text-sm text-slate-400 py-4 text-center">Abhi tak koi test record nahi hai.</p>`;
       return;
     }
 
@@ -298,18 +472,20 @@ const App = {
         <table class="w-full text-left text-xs sm:text-sm">
           <thead>
             <tr class="border-b border-slate-200 text-slate-400 uppercase font-semibold text-xs">
-              <th class="py-2.5">समय / दिनांक</th>
-              <th class="py-2.5">प्रयास</th>
-              <th class="py-2.5">सही</th>
-              <th class="py-2.5">गलत</th>
-              <th class="py-2.5">सटीकता</th>
-              <th class="py-2.5">कुल समय</th>
+              <th class="py-2.5">Date / Time</th>
+              <th class="py-2.5">File / Set Name</th>
+              <th class="py-2.5">Attempts</th>
+              <th class="py-2.5">Correct</th>
+              <th class="py-2.5">Wrong</th>
+              <th class="py-2.5">Accuracy</th>
+              <th class="py-2.5">Time Taken</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
             ${history.map(item => `
               <tr>
                 <td class="py-2.5 text-slate-500">${new Date(item.date).toLocaleDateString("hi-IN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
+                <td class="py-2.5 font-semibold text-slate-800">${item.setName || "Mixed Test"}</td>
                 <td class="py-2.5 font-medium text-slate-700">${item.total}</td>
                 <td class="py-2.5 font-semibold text-emerald-600">${item.correct}</td>
                 <td class="py-2.5 font-semibold text-rose-600">${item.wrong}</td>
@@ -332,10 +508,10 @@ const App = {
   },
 
   clearHistoryLog() {
-    if (confirm("क्या आप इतिहास और एनालिटिक्स साफ़ करना चाहते हैं?")) {
+    if (confirm("Kya aap itihaas aur analytics saaf karna chahte hain?")) {
       StorageManager.clearHistory();
       this.renderAnalytics();
-      this.showToast("इतिहास साफ़ कर दिया गया।", "info");
+      this.showToast("History saaf kar di gayi.", "info");
     }
   }
 };

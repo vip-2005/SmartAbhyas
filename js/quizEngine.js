@@ -1,6 +1,7 @@
 /**
  * quizEngine.js
- * Real Exam Mode: Navigation, Neutral Selection, Timer, Question Time Tracking, and Post-Exam Review
+ * Multi-Set Real Exam Mode:
+ * Specific Set filtering, Neutral Selection, Timer, Time Tracking, KaTeX rendering, and Set-based Logging.
  */
 const QuizEngine = {
   quizQuestions: [],
@@ -11,8 +12,22 @@ const QuizEngine = {
   timerInterval: null,
   timeRemaining: 60,
   perQuestionTimer: 60,
+  currentSetName: "Mixed Test",
 
-  // Seconds ko format karne ke liye helper (e.g. 45s ya 1m 15s)
+  // Math equations render helper (KaTeX)
+  renderMath(container) {
+    if (window.renderMathInElement && container) {
+      renderMathInElement(container, {
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '$', right: '$', display: false }
+        ],
+        throwOnError: false
+      });
+    }
+  },
+
+  // Seconds format helper
   formatSeconds(totalSec) {
     const sec = Math.max(0, Math.round(totalSec || 0));
     if (sec < 60) return `${sec}s`;
@@ -21,52 +36,69 @@ const QuizEngine = {
     return `${m}m ${s}s`;
   },
 
-  // Current question par bitaye gaye samay ko save karna
+  // Time recording for current question
   recordCurrentQuestionTime() {
     if (this.questionStartTime) {
       const elapsed = Math.round((Date.now() - this.questionStartTime) / 1000);
       this.timeSpentPerQuestion[this.currentIndex] = (this.timeSpentPerQuestion[this.currentIndex] || 0) + elapsed;
-      this.questionStartTime = Date.now(); // reset reference
+      this.questionStartTime = Date.now();
     }
+  },
+
+  // Target specific set directly from Vault/Card
+  startSetQuiz(setId) {
+    App.switchTab("quiz");
+    const setSelect = document.getElementById("quiz-set-select");
+    if (setSelect) {
+      setSelect.value = setId;
+    }
+    this.startQuiz();
   },
 
   startQuiz() {
     const limit = parseInt(document.getElementById("quiz-limit").value);
     const mode = document.getElementById("quiz-mode-select").value;
     const timerVal = parseInt(document.getElementById("quiz-timer-setting").value);
-    const selectedTopic = document.getElementById("quiz-topic-select") ? document.getElementById("quiz-topic-select").value : "all";
+    const selectedSetId = document.getElementById("quiz-set-select") ? document.getElementById("quiz-set-select").value : "all";
 
-    const allQuestions = StorageManager.getAllQuestions();
-    const mistakes = StorageManager.getUserProgress().incorrectQuestionIds || [];
+    const allSets = StorageManager.getAllTestSets();
+    let targetQuestions = [];
 
-    let pool = [];
-
-    // 1. मोड के अनुसार सवाल छाँटें
-    if (mode === "mistakes") {
-      const mistakeSet = new Set(mistakes);
-      pool = allQuestions.filter(q => mistakeSet.has(q.id));
-      if (pool.length === 0) {
-        App.showToast("अभिनंदन! आपकी मिस्टेक नोटबुक में कोई गलत सवाल नहीं है।", "success");
-        return;
-      }
+    // 1. Set Filter: Specific file ya All Sets
+    if (selectedSetId === "all") {
+      this.currentSetName = "Sabhi Files (Mixed Test)";
+      targetQuestions = StorageManager.getAllQuestions();
     } else {
-      pool = [...allQuestions];
-    }
-
-    // 2. टॉपिक/विषय फ़िल्टर
-    if (selectedTopic !== "all") {
-      pool = pool.filter(q => (q.topic === selectedTopic || q.subject === selectedTopic));
-      if (pool.length === 0) {
-        App.showToast(`चुने गए टॉपिक '${selectedTopic}' में कोई सवाल नहीं मिला!`, "error");
+      const foundSet = allSets.find(s => s.id === selectedSetId);
+      if (foundSet) {
+        this.currentSetName = foundSet.title;
+        targetQuestions = foundSet.questions || [];
+      } else {
+        App.showToast("Chuna gaya set nahi mila!", "error");
         return;
       }
     }
 
-    if (pool.length === 0) {
-      App.showToast("कोई प्रश्न उपलब्ध नहीं है। कृपया सवाल बैंक में प्रश्न जोड़ें।", "error");
+    if (targetQuestions.length === 0) {
+      App.showToast("Is set me koi sawal uplabdh nahi hai!", "error");
       return;
     }
 
+    let pool = [];
+
+    // 2. Mode Filter (Normal vs Mistakes Only)
+    if (mode === "mistakes") {
+      const mistakes = new Set(StorageManager.getUserProgress().incorrectQuestionIds || []);
+      pool = targetQuestions.filter(q => mistakes.has(q.id));
+      if (pool.length === 0) {
+        App.showToast("Is set me koi galat sawal nahi mila!", "info");
+        return;
+      }
+    } else {
+      pool = [...targetQuestions];
+    }
+
+    // Shuffle
     pool.sort(() => Math.random() - 0.5);
     this.quizQuestions = pool.slice(0, Math.min(limit, pool.length));
 
@@ -79,7 +111,6 @@ const QuizEngine = {
     document.getElementById("quiz-result-card").classList.add("hidden");
     document.getElementById("quiz-live-card").classList.remove("hidden");
 
-    // अगर पहले से रिव्यू बॉक्स बना हो तो उसे रीसेट करें
     const oldReview = document.getElementById("post-quiz-review-container");
     if (oldReview) oldReview.classList.add("hidden");
 
@@ -88,27 +119,21 @@ const QuizEngine = {
 
   renderCurrentQuestion() {
     clearInterval(this.timerInterval);
-
-    // Question start timestamp track karna
     this.questionStartTime = Date.now();
 
     const q = this.quizQuestions[this.currentIndex];
     const total = this.quizQuestions.length;
 
-    document.getElementById("live-subject-tag").textContent = q.subject || "रीजनिंग";
-    document.getElementById("live-topic-tag").textContent = q.topic || "सामान्य";
-    document.getElementById("live-progress-text").textContent = `सवाल ${this.currentIndex + 1} / ${total}`;
-    document.getElementById("question-source-tag").textContent = q.source || "SmartAbhyas Database";
-    document.getElementById("live-question-text").textContent = q.question;
+    document.getElementById("live-subject-tag").textContent = q.subject || "General";
+    document.getElementById("live-topic-tag").textContent = q.topic || "General";
+    document.getElementById("live-progress-text").textContent = `Sawal ${this.currentIndex + 1} / ${total}`;
+    document.getElementById("question-source-tag").textContent = `Source: ${q.source || this.currentSetName}`;
+    
+    const questionTextEl = document.getElementById("live-question-text");
+    questionTextEl.textContent = q.question;
 
     const progressPercent = ((this.currentIndex + 1) / total) * 100;
     document.getElementById("quiz-progress-bar").style.width = `${progressPercent}%`;
-
-    // एक्सप्लेनेशन लाइव टेस्ट में पूरी तरह छिपा रहेगा
-    const expBox = document.getElementById("explanation-container");
-    if (expBox) expBox.classList.add("hidden");
-    const expBtn = document.getElementById("btn-toggle-explain");
-    if (expBtn) expBtn.classList.add("hidden");
 
     // Options Render
     const optionsBox = document.getElementById("options-container");
@@ -119,8 +144,7 @@ const QuizEngine = {
     q.options.forEach((optText, index) => {
       const isSelected = (savedAnswer === index);
       const optBtn = document.createElement("button");
-      
-      // Neutral Real-Exam Styling
+
       optBtn.className = isSelected
         ? "option-btn w-full p-4 rounded-xl border-2 border-brand-600 bg-brand-50 text-brand-900 font-semibold flex items-start gap-3 transition shadow-sm"
         : "option-btn w-full p-4 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-left font-medium text-slate-700 flex items-start gap-3 transition";
@@ -129,11 +153,15 @@ const QuizEngine = {
         <span class="${isSelected ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600'} w-6 h-6 rounded-lg text-xs font-bold flex items-center justify-center border border-slate-200 mt-0.5 flex-shrink-0">
           ${String.fromCharCode(65 + index)}
         </span>
-        <span class="text-sm sm:text-base flex-grow text-left">${optText}</span>
+        <span class="text-sm sm:text-base flex-grow text-left opt-content">${optText}</span>
       `;
       optBtn.onclick = () => this.selectOption(index);
       optionsBox.appendChild(optBtn);
     });
+
+    // Render KaTeX in Question & Options
+    this.renderMath(questionTextEl);
+    this.renderMath(optionsBox);
 
     // Buttons State
     const prevBtn = document.getElementById("btn-prev-question");
@@ -146,7 +174,7 @@ const QuizEngine = {
     if (nextBtn) {
       nextBtn.disabled = false;
       if (this.currentIndex === total - 1) {
-        nextBtn.innerHTML = `सबमिट करें <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
+        nextBtn.innerHTML = `Submit Test <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
       } else {
         nextBtn.innerHTML = `Save & Next <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>`;
       }
@@ -184,7 +212,7 @@ const QuizEngine = {
         ? "option-btn w-full p-4 rounded-xl border-2 border-brand-600 bg-brand-50 text-brand-900 font-semibold flex items-start gap-3 transition shadow-sm"
         : "option-btn w-full p-4 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-left font-medium text-slate-700 flex items-start gap-3 transition";
 
-      const badge = btn.querySelector("span");
+      const badge = btn.querySelector("span:first-child");
       if (badge) {
         badge.className = `${isSelected ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600'} w-6 h-6 rounded-lg text-xs font-bold flex items-center justify-center border border-slate-200 mt-0.5 flex-shrink-0`;
       }
@@ -197,7 +225,7 @@ const QuizEngine = {
   clearCurrentResponse() {
     delete this.userResponses[this.currentIndex];
     this.renderCurrentQuestion();
-    App.showToast("विकल्प हटा दिया गया");
+    App.showToast("Option hata diya gaya");
   },
 
   previousQuestion() {
@@ -220,7 +248,7 @@ const QuizEngine = {
 
   handleTimeUp() {
     this.recordCurrentQuestionTime();
-    App.showToast("समय समाप्त! अगले सवाल पर जा रहे हैं।", "warning");
+    App.showToast("Samay samapt! Agle sawal par ja rahe hain.", "warning");
     if (this.currentIndex < this.quizQuestions.length - 1) {
       this.currentIndex++;
       this.renderCurrentQuestion();
@@ -234,22 +262,24 @@ const QuizEngine = {
     const attempted = Object.keys(this.userResponses).length;
     const unattempted = total - attempted;
 
-    const confirmMsg = `क्या आप वाकई टेस्ट सबमिट करना चाहते हैं?\n\nकुल प्रश्न: ${total}\nहल किए गए: ${attempted}\nछूटे हुए: ${unattempted}`;
+    const confirmMsg = `Kya aap test submit karna chahte hain?\n\nTotal Questions: ${total}\nAttempted: ${attempted}\nUnattempted: ${unattempted}`;
     if (confirm(confirmMsg)) {
       this.finishQuiz();
     }
   },
 
   abortQuiz() {
-    if (confirm("क्या आप वाकई टेस्ट रद्द करना चाहते हैं? प्रगति सेव नहीं होगी।")) {
+    if (confirm("Kya aap test radd karna chahte hain? Progress save nahi hogi.")) {
       clearInterval(this.timerInterval);
+      this.questionStartTime = null;
       this.resetToSetupView();
-      App.showToast("टेस्ट रद्द कर दिया गया।");
+      App.showToast("Test cancel kar diya gaya.");
     }
   },
 
   resetToSetupView() {
     clearInterval(this.timerInterval);
+    this.questionStartTime = null;
     document.getElementById("quiz-setup-card").classList.remove("hidden");
     document.getElementById("quiz-live-card").classList.add("hidden");
     document.getElementById("quiz-result-card").classList.add("hidden");
@@ -257,7 +287,7 @@ const QuizEngine = {
 
   finishQuiz() {
     clearInterval(this.timerInterval);
-    this.recordCurrentQuestionTime(); // Final question ka time record karein
+    this.recordCurrentQuestionTime();
 
     document.getElementById("quiz-live-card").classList.add("hidden");
     document.getElementById("quiz-result-card").classList.remove("hidden");
@@ -265,7 +295,6 @@ const QuizEngine = {
     let correct = 0;
     let wrong = 0;
     let unattempted = 0;
-    let wrongQuestions = [];
 
     this.quizQuestions.forEach((q, idx) => {
       const selected = this.userResponses[idx];
@@ -275,7 +304,6 @@ const QuizEngine = {
         correct++;
       } else {
         wrong++;
-        wrongQuestions.push(q);
         if (q.id) {
           StorageManager.addMistake(q.id);
         }
@@ -289,15 +317,14 @@ const QuizEngine = {
     document.getElementById("res-correct").textContent = correct;
     document.getElementById("res-wrong").textContent = wrong;
     document.getElementById("res-accuracy").textContent = `${accuracy}%`;
-    document.getElementById("res-added-mistakes").textContent = `${wrong} सवाल`;
-    document.getElementById("result-timestamp").textContent = `समाप्त: ${new Date().toLocaleDateString("hi-IN", { hour: "2-digit", minute: "2-digit" })}`;
+    document.getElementById("res-added-mistakes").textContent = `${wrong} sawal`;
+    document.getElementById("result-timestamp").textContent = `Samapt: ${new Date().toLocaleDateString("hi-IN", { hour: "2-digit", minute: "2-digit" })}`;
 
-    // कुल और औसत समय की गणना
     const totalTimeTaken = Object.values(this.timeSpentPerQuestion).reduce((acc, curr) => acc + curr, 0);
     const avgTime = total > 0 ? Math.round(totalTimeTaken / total) : 0;
 
-    // 5th & 6th parameter me time pass kiya
-    StorageManager.recordQuiz(total, correct, wrong, accuracy, totalTimeTaken, avgTime);
+    // Set name ke sath record save karein
+    StorageManager.recordQuiz(total, correct, wrong, accuracy, totalTimeTaken, avgTime, this.currentSetName);
 
     App.updateBadges();
     App.renderHeaderStats();
@@ -308,7 +335,6 @@ const QuizEngine = {
     else if (accuracy >= 50) emojiEl.textContent = "👍";
     else emojiEl.textContent = "📖";
 
-    // टेस्ट के बाद विस्तृत हल और रिव्यू तैयार करें
     this.renderPostQuizReview();
   },
 
@@ -325,9 +351,9 @@ const QuizEngine = {
     reviewContainer.innerHTML = `
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
-          <span>📝</span> सभी प्रश्नों का हल व व्याख्या (Detailed Solutions)
+          <span>📝</span> Sabhi Prashno Ka Hal Va Vyakhya (Detailed Solutions)
         </h3>
-        <span class="text-xs text-slate-500">रिवीजन करें और गलतियों को समझें</span>
+        <span class="text-xs text-slate-500">${this.currentSetName}</span>
       </div>
     `;
 
@@ -341,16 +367,15 @@ const QuizEngine = {
       let cardBorder = "border-slate-200 bg-white";
 
       if (isCorrect) {
-        statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">✓ सही (+1)</span>`;
+        statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">✓ Sahi (+1)</span>`;
         cardBorder = "border-emerald-200 bg-emerald-50/20";
       } else if (isUnattempted) {
-        statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600">छोड़ दिया (0)</span>`;
+        statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600">Chhoda (0)</span>`;
       } else {
-        statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800">✕ गलत उत्तर</span>`;
+        statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800">✕ Galat Uttar</span>`;
         cardBorder = "border-rose-200 bg-rose-50/20";
       }
 
-      // Liya gaya time badge
       const timeBadge = `<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">⏱️ ${this.formatSeconds(timeSpent)}</span>`;
 
       const qCard = document.createElement("div");
@@ -363,16 +388,16 @@ const QuizEngine = {
 
         if (oIdx === q.answer) {
           optStyle = "p-2.5 rounded-lg border border-emerald-500 bg-emerald-50 font-semibold text-emerald-900 text-xs sm:text-sm flex items-center gap-2";
-          mark = `<span class="ml-auto text-xs font-bold text-emerald-600">✓ सही उत्तर</span>`;
+          mark = `<span class="ml-auto text-xs font-bold text-emerald-600">✓ Sahi Uttar</span>`;
         } else if (oIdx === userSel && !isCorrect) {
           optStyle = "p-2.5 rounded-lg border border-rose-400 bg-rose-50 font-semibold text-rose-900 text-xs sm:text-sm flex items-center gap-2";
-          mark = `<span class="ml-auto text-xs font-bold text-rose-600">आपका चयन</span>`;
+          mark = `<span class="ml-auto text-xs font-bold text-rose-600">Aapka Chayan</span>`;
         }
 
         optionsListHtml += `
           <div class="${optStyle}">
             <span class="w-5 h-5 rounded flex items-center justify-center font-bold text-xs bg-slate-100 border border-slate-200">${String.fromCharCode(65 + oIdx)}</span>
-            <span>${opt}</span>
+            <span class="opt-content">${opt}</span>
             ${mark}
           </div>
         `;
@@ -381,19 +406,23 @@ const QuizEngine = {
       qCard.innerHTML = `
         <div class="flex items-center justify-between gap-2 flex-wrap">
           <div class="flex items-center gap-2">
-            <span class="text-xs font-bold text-slate-500 uppercase">Q${idx + 1}. [${q.subject || 'सामान्य'}]</span>
+            <span class="text-xs font-bold text-slate-500 uppercase">Q${idx + 1}. [${q.subject || 'General'}]</span>
             ${timeBadge}
           </div>
           ${statusBadge}
         </div>
-        <p class="text-sm sm:text-base font-semibold text-slate-800">${q.question}</p>
+        <p class="text-sm sm:text-base font-semibold text-slate-800 question-body">${q.question}</p>
         <div class="space-y-1.5 pt-1">${optionsListHtml}</div>
         <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 mt-2">
-          <span class="text-xs font-bold text-brand-700 block mb-1">💡 विस्तृत हल (Explanation):</span>
-          <p class="text-xs sm:text-sm text-slate-600 whitespace-pre-line leading-relaxed">${q.explanation || 'व्याख्या उपलब्ध नहीं है।'}</p>
+          <span class="text-xs font-bold text-brand-700 block mb-1">💡 Solution & Explanation:</span>
+          <p class="text-xs sm:text-sm text-slate-600 whitespace-pre-line leading-relaxed exp-body">${q.explanation || 'Vyakhya uplabdh nahi hai.'}</p>
         </div>
       `;
+
       reviewContainer.appendChild(qCard);
     });
+
+    // KaTeX render in review
+    this.renderMath(reviewContainer);
   }
 };
