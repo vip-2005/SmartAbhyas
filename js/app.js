@@ -1,6 +1,7 @@
 /**
  * app.js
- * Multi-Set Vault UI, PDF-to-Mock Engine, Mistake Notebook, Analytics & KaTeX integration
+ * Multi-Set Vault UI, Bulletproof PDF-to-Mock Engine (Gemini AI + PDF.js),
+ * Mistake Notebook, Analytics & KaTeX auto-rendering.
  */
 const App = {
   init() {
@@ -13,7 +14,7 @@ const App = {
     this.updateSetFilterDropdown();
   },
 
-  // KaTeX helper
+  // KaTeX formula render helper
   renderMath(container) {
     if (window.renderMathInElement && container) {
       renderMathInElement(container, {
@@ -39,11 +40,11 @@ const App = {
     if (!keyInput) return;
     const key = keyInput.value.trim();
     if (!key) {
-      this.showToast("Kripya valid API Key enter karein!", "error");
+      this.showToast("कृपया वैध Gemini API Key दर्ज करें!", "error");
       return;
     }
     localStorage.setItem("gemini_api_key", key);
-    this.showToast("Gemini API Key successfully save ho gayi!", "success");
+    this.showToast("Gemini API Key सुरक्षित सेव हो गई!", "success");
   },
 
   formatDuration(seconds) {
@@ -57,7 +58,8 @@ const App = {
 
   renderHeaderStats() {
     const progress = StorageManager.getUserProgress();
-    document.getElementById("streak-count").textContent = progress.streak || 1;
+    const streakEl = document.getElementById("streak-count");
+    if (streakEl) streakEl.textContent = progress.streak || 1;
     this.updateBadges();
   },
 
@@ -67,10 +69,10 @@ const App = {
     const mistakeBadge = document.getElementById("mistake-count-badge");
     if (mistakeBadge) mistakeBadge.textContent = count;
     const notebookBadge = document.getElementById("notebook-count-badge");
-    if (notebookBadge) notebookBadge.textContent = `${count} prashn`;
+    if (notebookBadge) notebookBadge.textContent = `${count} प्रश्न`;
   },
 
-  // Setup tab ke dropdown ko update karein jisme saare sets date ke sath dikhein
+  // Setup tab ke dropdown ko update karna jisme saare sets date ke sath aate hain
   updateSetFilterDropdown() {
     const dropdown = document.getElementById("quiz-set-select");
     if (!dropdown) return;
@@ -78,12 +80,12 @@ const App = {
     const sets = StorageManager.getAllTestSets();
     const currentSelected = dropdown.value;
 
-    dropdown.innerHTML = `<option value="all">📁 Sabhi Files Mix (${StorageManager.getAllQuestions().length} Sawal)</option>`;
+    dropdown.innerHTML = `<option value="all">📁 सभी फाइल्स मिक्स (${StorageManager.getAllQuestions().length} सवाल)</option>`;
 
     sets.forEach(s => {
       const option = document.createElement("option");
       option.value = s.id;
-      option.textContent = `${s.title} [${s.subject}] • (${s.questions.length} sawal - ${s.uploadDate})`;
+      option.textContent = `${s.title} [${s.subject}] • (${s.questions.length} सवाल - ${s.uploadDate})`;
       dropdown.appendChild(option);
     });
 
@@ -105,7 +107,7 @@ const App = {
     toast.classList.remove("translate-y-20", "opacity-0", "pointer-events-none");
     setTimeout(() => {
       toast.classList.add("translate-y-20", "opacity-0", "pointer-events-none");
-    }, 3200);
+    }, 3500);
   },
 
   switchTab(tabId) {
@@ -133,7 +135,7 @@ const App = {
   startMistakesOnlyQuiz() {
     const mistakes = StorageManager.getUserProgress().incorrectQuestionIds || [];
     if (mistakes.length === 0) {
-      this.showToast("Review ke liye koi galat sawal nahi hai!", "info");
+      this.showToast("रिवीजन के लिए कोई गलत सवाल नहीं बचा है!", "info");
       return;
     }
     this.switchTab("quiz");
@@ -156,8 +158,8 @@ const App = {
           <div class="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3">
             <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
           </div>
-          <h3 class="font-bold text-slate-800 text-lg">Shaandaar! Koi galti baki nahi hai</h3>
-          <p class="text-slate-500 text-sm mt-1 max-w-sm mx-auto">Jab aap test denge aur koi sawal galat hoga, toh wo yahan automatic revision ke liye aa jayega.</p>
+          <h3 class="font-bold text-slate-800 text-lg">शानदार! कोई गलती बकाया नहीं है</h3>
+          <p class="text-slate-500 text-sm mt-1 max-w-sm mx-auto">जब आप टेस्ट देंगे और कोई सवाल गलत होगा, तो वह स्वतः यहाँ रिवीजन के लिए दर्ज हो जाएगा।</p>
         </div>
       `;
       return;
@@ -169,12 +171,12 @@ const App = {
       card.innerHTML = `
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-2">
-            <span class="text-xs font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-700">Galti #${idx + 1}</span>
+            <span class="text-xs font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-700">गलती #${idx + 1}</span>
             <span class="text-xs text-slate-400 font-medium">${q.subject || "General"} • ${q.topic || "Topic"}</span>
           </div>
           <button onclick="App.resolveMistake('${q.id}')" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition flex items-center gap-1.5">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-            Revision Purna (Resolved)
+            रिवीजन पूर्ण (Resolved)
           </button>
         </div>
 
@@ -189,8 +191,8 @@ const App = {
         </div>
 
         <div class="bg-amber-50/70 border border-amber-200 rounded-xl p-3 text-xs text-slate-700">
-          <span class="font-bold text-amber-800 block mb-1">💡 Solution & Explanation:</span>
-          <p class="whitespace-pre-line leading-relaxed">${q.explanation || "Uttar: Vikalp " + String.fromCharCode(65 + q.answer)}</p>
+          <span class="font-bold text-amber-800 block mb-1">💡 सही हल / व्याख्या:</span>
+          <p class="whitespace-pre-line leading-relaxed">${q.explanation || "उत्तर: विकल्प " + String.fromCharCode(65 + q.answer)}</p>
         </div>
       `;
       container.appendChild(card);
@@ -203,19 +205,19 @@ const App = {
     StorageManager.removeMistake(id);
     this.updateBadges();
     this.renderMistakeNotebook();
-    this.showToast("Prashn ko sudhara hua maan liya gaya!", "success");
+    this.showToast("प्रश्न को सुधारा हुआ मान लिया गया!", "success");
   },
 
   clearResolvedMistakesPrompt() {
-    if (confirm("Kya aap sabhi galat sawalon ki list saaf karna chahte hain?")) {
+    if (confirm("क्या आप सभी गलत सवालों की लिस्ट साफ़ करना चाहते हैं?")) {
       StorageManager.clearAllMistakes();
       this.updateBadges();
       this.renderMistakeNotebook();
-      this.showToast("Mistake notebook khali kar di gayi.", "info");
+      this.showToast("मिस्टेक नोटबुक खाली कर दी गई।", "info");
     }
   },
 
-  // TAB 3: Alag-Alag Uploaded Files/Sets ka Vault Render Karein
+  // File Vault (Uploaded Sets Render)
   renderTestSetsVault() {
     const container = document.getElementById("bank-list-container");
     const statsText = document.getElementById("bank-stats-text");
@@ -225,13 +227,13 @@ const App = {
     const totalQ = StorageManager.getAllQuestions().length;
 
     if (statsText) {
-      statsText.textContent = `Total Uploaded Sets: ${sets.length} | Kul Sawal: ${totalQ}`;
+      statsText.textContent = `कुल अपलोड सेट: ${sets.length} | कुल सवाल: ${totalQ}`;
     }
 
     container.innerHTML = "";
 
     if (sets.length === 0) {
-      container.innerHTML = `<p class="text-sm text-slate-400 text-center py-8">Koi test set uplabdh nahi hai. Upar se PDF ya JSON upload karein.</p>`;
+      container.innerHTML = `<p class="text-sm text-slate-400 text-center py-8">कोई टेस्ट सेट उपलब्ध नहीं है। ऊपर से PDF या JSON अपलोड करें।</p>`;
       return;
     }
 
@@ -250,25 +252,24 @@ const App = {
               <span class="text-xs text-slate-400">📅 ${set.uploadDate}</span>
             </div>
             <h4 class="font-bold text-slate-800 text-base">${set.title}</h4>
-            <p class="text-xs text-slate-500 mt-0.5">Total Questions: <span class="font-semibold text-slate-700">${set.questions.length}</span></p>
+            <p class="text-xs text-slate-500 mt-0.5">कुल प्रश्न: <span class="font-semibold text-slate-700">${set.questions.length}</span></p>
           </div>
 
           <div class="flex items-center gap-2">
             <button onclick="QuizEngine.startSetQuiz('${set.id}')" class="px-3.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold shadow transition flex items-center gap-1.5">
-              <span>▶</span> Iska Test Dein
+              <span>▶</span> इसका टेस्ट दें
             </button>
-            <button onclick="App.confirmDeleteSet('${set.id}', '${set.title.replace(/'/g, "\\'")}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-500 rounded-xl text-xs font-medium border border-slate-200 transition" title="Set Delete Karein">
+            <button onclick="App.confirmDeleteSet('${set.id}', '${set.title.replace(/'/g, "\\'")}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-500 rounded-xl text-xs font-medium border border-slate-200 transition" title="सेट डिलीट करें">
               🗑️
             </button>
           </div>
         </div>
 
-        <!-- Sample Questions Preview (First 2 questions) -->
         <div class="bg-slate-50 rounded-xl p-3 border border-slate-100 text-xs text-slate-600 space-y-1.5">
-          <span class="font-semibold text-slate-500 block text-[11px] uppercase tracking-wider">Preview (Pehle 2 Sawal):</span>
+          <span class="font-semibold text-slate-500 block text-[11px] uppercase tracking-wider">Preview (पहले 2 सवाल):</span>
           ${set.questions.slice(0, 2).map((q, qIdx) => `
             <div class="truncate">
-              <span class="font-bold text-slate-700">Q${qIdx + 1}.</span>${q.question}
+              <span class="font-bold text-slate-700">Q${qIdx + 1}.</span> ${q.question}
             </div>
           `).join("")}
         </div>
@@ -280,16 +281,16 @@ const App = {
   },
 
   confirmDeleteSet(setId, title) {
-    if (confirm(`Kya aap set "${title}" ko delete karna chahte hain? Iske sawal aur iski mistakelist hata di jayegi.`)) {
+    if (confirm(`क्या आप सेट "${title}" को डिलीट करना चाहते हैं? इसके सभी सवाल और मिस्टेक्स हटा दिए जाएंगे।`)) {
       StorageManager.deleteTestSet(setId);
       this.renderTestSetsVault();
       this.updateSetFilterDropdown();
       this.updateBadges();
-      this.showToast("Set kamyabi se delete ho gaya!", "success");
+      this.showToast("सेट सफलतापूर्वक हटा दिया गया!", "success");
     }
   },
 
-  // 1. JSON File Upload (As a dedicated set)
+  // 1. JSON Upload (As dedicated set)
   handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -305,9 +306,9 @@ const App = {
         const newSet = StorageManager.addNewTestSet(cleanTitle, sub, questionsList, "JSON");
         this.renderTestSetsVault();
         this.updateSetFilterDropdown();
-        this.showToast(`Naya set "${newSet.title}" (${newSet.questions.length} sawal) add ho gaya!`, "success");
+        this.showToast(`नया सेट "${newSet.title}" जोड़ा गया!`, "success");
       } catch (err) {
-        this.showToast("Invalid JSON file format!", "error");
+        this.showToast("अमान्य JSON फाइल प्रारूप!", "error");
       }
     };
     reader.readAsText(file);
@@ -321,7 +322,7 @@ const App = {
 
     const apiKey = localStorage.getItem("gemini_api_key");
     if (!apiKey) {
-      this.showToast("Pehle Gemini API Key dalein aur Save karein!", "error");
+      this.showToast("कृपया पहले Gemini API Key दर्ज करें और Save करें!", "error");
       document.getElementById("api-key-setup-box")?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
@@ -329,43 +330,50 @@ const App = {
     const statusText = document.getElementById("pdf-status-text");
     if (statusText) {
       statusText.classList.remove("hidden");
-      statusText.textContent = "⏳ PDF se prashn nikaale ja rahe hain...";
+      statusText.textContent = "⏳ PDF से टेक्स्ट निकाला जा रहा है...";
     }
 
     try {
-      // PDF.js Text Extraction
+      // PDF.js text extraction
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       let rawText = "";
 
-      const maxPages = Math.min(pdf.numPages, 6); // Pehle 6 pages
+      const maxPages = Math.min(pdf.numPages, 5); // Read first 5 pages
       for (let i = 1; i <= maxPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
-        rawText += textContent.items.map(item => item.str).join(" ") + "\n";
+        const pageStrings = textContent.items.map(item => item.str).join(" ");
+        rawText += pageStrings + "\n";
       }
 
-      if (statusText) statusText.textContent = "🤖 AI Multiple-Choice Questions prepare kar raha hai...";
+      // Check if text exists or is scanned/image
+      if (rawText.trim().length < 50) {
+        throw new Error("SCANNED_PDF: इस PDF में चयन योग्य टेक्स्ट नहीं है। यह फोटो या स्कैन की गई PDF प्रतीत होती है।");
+      }
+
+      if (statusText) statusText.textContent = "🤖 AI बहुविकल्पीय प्रश्न (MCQs) तैयार कर रहा है...";
 
       const prompt = `
-Extract all multiple-choice questions from this study sheet text. Return ONLY a valid JSON array adhering strictly to this schema:
+Extract all multiple-choice questions from the following text.
+Respond with ONLY a raw JSON array adhering strictly to this schema:
 [
   {
     "id": "PDF_Q1",
-    "subject": "Maths",
+    "subject": "General",
     "topic": "General",
-    "question": "Question text in Hindi or English (use $...$ for inline math or formulas if applicable)",
+    "question": "Question text in Hindi or English (use $...$ for inline math if applicable)",
     "options": ["Option A", "Option B", "Option C", "Option D"],
     "answer": 0,
-    "explanation": "Detailed explanation"
+    "explanation": "Brief explanation"
   }
 ]
-Rules:
-- "answer" must be the zero-based index of correct option (0 for A, 1 for B, 2 for C, 3 for D).
-- Output strictly raw JSON only. No markdown formatting, no backticks, no comments.
+Note:
+- "answer" MUST be the integer index of the correct option (0 for Option A, 1 for Option B, 2 for Option C, 3 for Option D).
+- Do not output any preamble, commentary, or markdown backticks. Return strictly the raw JSON array starting with [ and ending with ].
 
-Content:
-${rawText.slice(0, 10000)}
+Study Material Text:
+${rawText.slice(0, 8000)}
 `;
 
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
@@ -375,20 +383,36 @@ ${rawText.slice(0, 10000)}
       });
 
       const data = await response.json();
-      if (!data.candidates || !data.candidates[0]) {
-        throw new Error("AI response format error");
+
+      if (data.error) {
+        throw new Error(`API_ERROR: ${data.error.message || "Invalid API Key"}`);
+      }
+
+      if (!data.candidates || !data.candidates[0]?.content?.parts?.[0]?.text) {
+        throw new Error("EMPTY_AI_RESPONSE");
       }
 
       let resText = data.candidates[0].content.parts[0].text.trim();
-      resText = resText.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
 
-      const questions = JSON.parse(resText);
+      // Robust array bracket extraction
+      const firstBracket = resText.indexOf('[');
+      const lastBracket = resText.lastIndexOf(']');
+
+      if (firstBracket === -1 || lastBracket === -1) {
+        throw new Error("JSON_PARSE_ERROR: AI ने सही फॉर्मेट में प्रश्न नहीं लौटाए।");
+      }
+
+      const cleanJsonString = resText.substring(firstBracket, lastBracket + 1);
+      const questions = JSON.parse(cleanJsonString);
+
+      if (!Array.isArray(questions) || questions.length === 0) {
+        throw new Error("NO_QUESTIONS_FOUND: कोई वैध सवाल नहीं बन पाया।");
+      }
+
       const cleanTitle = file.name.replace(/\.[^/.]+$/, "");
-
-      // Alag set ke roop me save karein
       const newSet = StorageManager.addNewTestSet(cleanTitle, questions[0]?.subject || "PDF Mock", questions, "PDF");
 
-      if (statusText) statusText.textContent = `✅ ${newSet.questions.length} sawal tayyar! Test shuru ho raha hai...`;
+      if (statusText) statusText.textContent = `✅ ${newSet.questions.length} सवाल तैयार! टेस्ट शुरू हो रहा है...`;
 
       this.renderTestSetsVault();
       this.updateSetFilterDropdown();
@@ -400,49 +424,59 @@ ${rawText.slice(0, 10000)}
 
     } catch (err) {
       console.error(err);
-      if (statusText) statusText.textContent = "❌ PDF parse karne me error aaya. Kripya check karein text readable hai ya nahi.";
-      this.showToast("PDF parsing error! Check API key or PDF text.", "error");
+      if (err.message && err.message.startsWith("SCANNED_PDF")) {
+        this.showToast("यह स्कैन/फोटो PDF है! कृपया डिजिटल टेक्स्ट वाली PDF अपलोड करें।", "error");
+        if (statusText) statusText.textContent = "❌ स्कैन/फोटो PDF का टेक्स्ट पढ़ा नहीं जा सकता।";
+      } else if (err.message && err.message.startsWith("API_ERROR")) {
+        this.showToast("API Key गलत है या लिमिट समाप्त हो गई है!", "error");
+        if (statusText) statusText.textContent = "❌ Gemini API Key अमान्य है।";
+      } else {
+        this.showToast("PDF पार्स करने में समस्या आई। कृपया पुनः प्रयास करें।", "error");
+        if (statusText) statusText.textContent = "❌ PDF पार्स करने में समस्या आई।";
+      }
     }
 
     event.target.value = "";
   },
 
   openPasteModal() {
-    document.getElementById("paste-json-modal").classList.remove("hidden");
+    const modal = document.getElementById("paste-json-modal");
+    if (modal) modal.classList.remove("hidden");
   },
 
   closePasteModal() {
-    document.getElementById("paste-json-modal").classList.add("hidden");
+    const modal = document.getElementById("paste-json-modal");
+    if (modal) modal.classList.add("hidden");
   },
 
   importFromPastedText() {
     const text = document.getElementById("json-paste-area").value.trim();
     if (!text) {
-      this.showToast("Kripya pehle JSON data paste karein.", "error");
+      this.showToast("कृपया पहले JSON डेटा पेस्ट करें।", "error");
       return;
     }
     try {
       const parsed = JSON.parse(text);
       const questionsList = Array.isArray(parsed) ? parsed : (parsed.questions || []);
       const title = `Pasted Set (${new Date().toLocaleTimeString("hi-IN", { hour: '2-digit', minute: '2-digit' })})`;
-      
+
       const newSet = StorageManager.addNewTestSet(title, "General", questionsList, "JSON");
       this.closePasteModal();
       document.getElementById("json-paste-area").value = "";
       this.renderTestSetsVault();
       this.updateSetFilterDropdown();
-      this.showToast(`Naya set "${newSet.title}" jod diya gaya!`, "success");
+      this.showToast(`नया सेट "${newSet.title}" जोड़ा गया!`, "success");
     } catch (err) {
-      this.showToast("JSON format galat hai!", "error");
+      this.showToast("JSON फॉर्मेट गलत है!", "error");
     }
   },
 
   restoreDefaultQuestions() {
-    if (confirm("Kya aap default questions restore karna chahte hain?")) {
+    if (confirm("क्या आप डिफ़ॉल्ट सवाल रीस्टोर करना चाहते हैं?")) {
       StorageManager.restoreDefaults();
       this.renderTestSetsVault();
       this.updateSetFilterDropdown();
-      this.showToast("Default questions restore ho gaye!", "success");
+      this.showToast("डिफ़ॉल्ट सवाल रीस्टोर हो गए!", "success");
     }
   },
 
@@ -454,16 +488,20 @@ ${rawText.slice(0, 10000)}
     const totalCorrect = history.reduce((acc, curr) => acc + (curr.correct || 0), 0);
     const overallAcc = totalSolved > 0 ? Math.round((totalCorrect / totalSolved) * 100) : 0;
 
-    document.getElementById("stat-tests-count").textContent = history.length;
-    document.getElementById("stat-total-solved").textContent = totalSolved;
-    document.getElementById("stat-overall-accuracy").textContent = `${overallAcc}%`;
-    document.getElementById("stat-streak-display").textContent = `${progress.streak || 1} din 🔥`;
+    const tCount = document.getElementById("stat-tests-count");
+    if (tCount) tCount.textContent = history.length;
+    const sCount = document.getElementById("stat-total-solved");
+    if (sCount) sCount.textContent = totalSolved;
+    const aCount = document.getElementById("stat-overall-accuracy");
+    if (aCount) aCount.textContent = `${overallAcc}%`;
+    const streakDisplay = document.getElementById("stat-streak-display");
+    if (streakDisplay) streakDisplay.textContent = `${progress.streak || 1} दिन 🔥`;
 
     const historyContainer = document.getElementById("history-table-container");
     if (!historyContainer) return;
 
     if (history.length === 0) {
-      historyContainer.innerHTML = `<p class="text-sm text-slate-400 py-4 text-center">Abhi tak koi test record nahi hai.</p>`;
+      historyContainer.innerHTML = `<p class="text-sm text-slate-400 py-4 text-center">अभी तक कोई टेस्ट रिकॉर्ड नहीं है।</p>`;
       return;
     }
 
@@ -472,13 +510,13 @@ ${rawText.slice(0, 10000)}
         <table class="w-full text-left text-xs sm:text-sm">
           <thead>
             <tr class="border-b border-slate-200 text-slate-400 uppercase font-semibold text-xs">
-              <th class="py-2.5">Date / Time</th>
-              <th class="py-2.5">File / Set Name</th>
-              <th class="py-2.5">Attempts</th>
-              <th class="py-2.5">Correct</th>
-              <th class="py-2.5">Wrong</th>
-              <th class="py-2.5">Accuracy</th>
-              <th class="py-2.5">Time Taken</th>
+              <th class="py-2.5">दिनांक / समय</th>
+              <th class="py-2.5">फाइल / सेट नाम</th>
+              <th class="py-2.5">प्रयास</th>
+              <th class="py-2.5">सही</th>
+              <th class="py-2.5">गलत</th>
+              <th class="py-2.5">सटीकता</th>
+              <th class="py-2.5">समय</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
@@ -508,10 +546,10 @@ ${rawText.slice(0, 10000)}
   },
 
   clearHistoryLog() {
-    if (confirm("Kya aap itihaas aur analytics saaf karna chahte hain?")) {
+    if (confirm("क्या आप इतिहास और एनालिटिक्स साफ़ करना चाहते हैं?")) {
       StorageManager.clearHistory();
       this.renderAnalytics();
-      this.showToast("History saaf kar di gayi.", "info");
+      this.showToast("इतिहास साफ़ कर दिया गया।", "info");
     }
   }
 };
